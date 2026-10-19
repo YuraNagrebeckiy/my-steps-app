@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Ритм Дня — Управление Энергией</title>
+
+  <!-- Настройки для iPhone и Android (PWA) -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Ритм Дня" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0f1115" />
+
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- Баннер быстрой установки на экран телефона -->
+    <div id="install-banner" class="install-banner hidden">
+      <div class="install-text">
+        <span>📲</span>
+        <div>
+          <strong>Установить «Ритм Дня» на телефон</strong>
+          <p id="install-subtext">Быстрый доступ с главного экрана и работа без интернета</p>
+        </div>
+      </div>
+      <div class="install-actions">
+        <button id="install-btn" class="btn-install" onclick="triggerInstallApp()">Установить</button>
+        <button class="mini-btn" onclick="dismissInstallBanner()">✕</button>
+      </div>
+    </div>
+
+    <!-- Персонализированная шапка -->
+    <header class="top-header">
+      <div class="header-main">
+        <div>
+          <span class="user-greeting">Юрий Нагребецкий • Личный ресурс</span>
+          <span class="date-label" id="current-date">Понедельник</span>
+          <h1>Ритм Дня</h1>
+        </div>
+        <div class="header-actions">
+          <button id="gcal-sync-btn" class="icon-pill-btn" onclick="handleGoogleCalendarClick()" title="Синхронизация с Google Календарём">
+            📅 <span id="gcal-status-label">Календарь</span>
+          </button>
+          <button id="alarm-open-btn" class="icon-pill-btn" onclick="openAlarmModal()" title="Настроить будильник">
+            🔔 <span id="alarm-time-badge">07:30</span>
+          </button>
+          <button id="day-type-toggle" class="day-type-btn" onclick="toggleDayType()">
+            🛠️ Рабочий
+          </button>
+        </div>
+      </div>
+
+      <!-- Главный индикатор заряда батареи энергии (HealthKit) -->
+      <div class="battery-hero-card">
+        <div class="battery-top-row">
+          <div class="battery-title-group">
+            <span style="font-size: 24px;" id="battery-emoji">🔋</span>
+            <div>
+              <span class="status-label">Заряд энергии (HealthKit + Нагрузка)</span>
+              <div style="display:flex; align-items:baseline; gap:8px;">
+                <span class="battery-big-value" id="sleep-score">88%</span>
+                <span class="energy-tag" id="battery-state-tag">Высокий ресурс</span>
+              </div>
+            </div>
+          </div>
+          <button class="icon-pill-btn" onclick="switchPage('health')" title="Настроить сон и HealthKit">
+            ❤️ Сон
+          </button>
+        </div>
+
+        <div class="battery-bar-outer">
+          <div class="battery-bar-inner" id="battery-bar-fill"></div>
+        </div>
+
+        <!-- 4 ключевых фактора формулы энергии -->
+        <div class="battery-metrics-row">
+          <div class="mini-metric" onclick="switchPage('health')">
+            <span class="mini-metric-label">🌙 Общий сон</span>
+            <span class="mini-metric-val" id="metric-sleep-hours">8.0 ч</span>
+          </div>
+          <div class="mini-metric" onclick="switchPage('health')">
+            <span class="mini-metric-label">🌊 Глубокий</span>
+            <span class="mini-metric-val" id="metric-deep-sleep">3.0 ч</span>
+          </div>
+          <div class="mini-metric" onclick="switchPage('health')">
+            <span class="mini-metric-label">🕙 Отбой</span>
+            <span class="mini-metric-val" id="metric-bedtime">22:45</span>
+          </div>
+          <div class="mini-metric" onclick="switchPage('health')">
+            <span class="mini-metric-label">🔥 Нагрузка</span>
+            <span class="mini-metric-val" id="metric-calories">420 ккал</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Быстрая панель коррекции и шагов -->
+      <div class="status-bar">
+        <div class="status-pill">
+          <span class="status-icon">⚡</span>
+          <div>
+            <span class="status-label">Ручная коррекция</span>
+            <div class="status-controls">
+              <button class="mini-btn" onclick="changeSleep(-5)">-</button>
+              <span class="status-value" id="sleep-score-pill">88%</span>
+              <button class="mini-btn" onclick="changeSleep(5)">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="status-pill clickable-pill" onclick="openStepsModal()">
+          <span class="status-icon">👟</span>
+          <div>
+            <span class="status-label">Шаги (Health) ✎</span>
+            <div class="status-controls">
+              <span class="status-value" id="steps-count">4 250</span>
+              <span class="status-sub">/ 8 000</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- ==================== СТРАНИЦА 1: ГЛАВНАЯ (СВОДКА) ==================== -->
+    <main id="page-home" class="page-section active">
+
+      <!-- Вопрос дня: Будний или Выходной + Самочувствие -->
+      <section id="morning-checkin" class="card checkin-card">
+        <div class="card-header-row">
+          <span class="alarm-badge" id="checkin-badge">☀️ Настройка ритма дня</span>
+          <span class="status-sub" id="day-mode-indicator">Будний режим</span>
+        </div>
+        <h2>Сегодня будний день или выходной?</h2>
+        <p class="card-desc">Выбери тип дня и самочувствие — система перестроит 4 рекомендации и расписание под твои силы и задачи.</p>
+
+        <div class="checkin-options">
+          <button id="btn-mode-workday" class="checkin-btn active" onclick="applyMorningChoice('workday')">
+            🛠️ Будний (Рабочий)
+          </button>
+          <button id="btn-mode-weekend" class="checkin-btn" onclick="applyMorningChoice('weekend')">
+            ☕ Выходной день
+          </button>
+        </div>
+
+        <div class="energy-question">
+          <p>Субъективное ощущение сил с утра:</p>
+          <div class="energy-buttons">
+            <button id="mood-high" class="energy-btn" onclick="setMorningEnergy('high')">🔥 Заряжен</button>
+            <button id="mood-medium" class="energy-btn active" onclick="setMorningEnergy('medium')">👍 Нормально</button>
+            <button id="mood-low" class="energy-btn" onclick="setMorningEnergy('low')">🪫 Нет сил</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Блок из 4 динамических карточек рекомендаций -->
+      <section class="card">
+        <div class="card-header-row">
+          <div>
+            <h2>4 рекомендации на сегодня</h2>
+            <p class="card-desc" style="margin-bottom:0;" id="rec-subtitle">Сформировано на основе сна, глубокой фазы, нагрузки и твоих задач</p>
+          </div>
+          <span class="energy-tag" id="rec-context-badge">Рабочий • 88%</span>
+        </div>
+
+        <div id="recommendations-grid" class="recommendations-grid" style="margin-top: 12px;">
+          <!-- Заполняется автоматически через JS (4 карточки) -->
+        </div>
+      </section>
+
+      <!-- Координатор свободного окна -->
+      <section id="window-coordinator" class="card assistant-card">
+        <div class="assistant-header">
+          <div class="assistant-badge">
+            <span class="pulse-dot"></span>
+            <span>Координатор окон календаря</span>
+          </div>
+          <span class="energy-tag" id="energy-recommendation-tag">🔥 Высокий ресурс</span>
+        </div>
+        <p id="coordinator-message" class="assistant-text">
+          В расписании есть свободное окно <strong>10:00 — 13:00</strong>. Какую задачу поставим?
+        </p>
+
+        <div id="quick-chips" class="quick-chips"></div>
+
+        <div class="custom-slot-form">
+          <input type="text" id="custom-window-input" placeholder="Напиши или надиктуй план в окно..." />
+          <button id="voice-window-btn" class="voice-btn" onclick="startVoiceInput('custom-window-input', 'voice-window-btn')" title="Голосовой ввод">🎤</button>
+          <button class="btn-primary" onclick="assignCustomToFreeWindow()">Поставить</button>
+        </div>
+      </section>
+
+      <!-- Виджет: Сейчас в фокусе -->
+      <section class="card focus-card">
+        <div class="focus-header">
+          <span class="focus-tag">СЕЙЧАС В ФОКУСЕ</span>
+          <span class="focus-time" id="current-slot-time">10:00 — 13:00</span>
+        </div>
+        <h2 id="current-slot-title">Защита первого окна: Главная задача</h2>
+        <p id="current-slot-desc">Первые 45–60 минут без телефона и мессенджеров — фокус на самой важной задаче.</p>
+
+        <div class="focus-actions">
+          <button class="btn btn-done" onclick="completeCurrentSlot()">✓ Готово</button>
+          <button class="btn btn-shift" onclick="shiftSchedule(30)">+30 мин (Сдвиг)</button>
+          <button class="btn btn-low" onclick="activateLowEnergyMode()">🛌 Нет сил</button>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ==================== СТРАНИЦА 2: ПЛАН И КАЛЕНДАРЬ ==================== -->
+    <main id="page-calendar" class="page-section">
+
+      <section class="card">
+        <div class="card-header-row">
+          <h2>📅 Синхронизация календаря</h2>
+          <button class="btn-primary" onclick="handleGoogleCalendarClick()">Синхронизировать</button>
+        </div>
+        <p class="card-desc">
+          Приложение проверяет твои события в Google Календаре, автоматически находит свободные окна и защищает первый утренний блок (45–60 минут) от чужих срочных просьб.
+        </p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="chip" onclick="autoFillScheduleByEnergy()">✨ Заполнить свободные окна под мой заряд</button>
+          <button class="chip" onclick="protectMorningBlock()">🛡️ Защитить 1-й утренний час (Категория А)</button>
+        </div>
+      </section>
+
+      <section class="card schedule-section">
+        <div class="section-header">
+          <h2>План и окна времени</h2>
+          <button class="text-btn" onclick="openAddSlotModal()">+ Свой слот</button>
+        </div>
+        <div id="schedule-list" class="timeline">
+          <!-- Генерируется через JS -->
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ==================== СТРАНИЦА 3: ЗАДАЧИ И ОБЪЕКТЫ ==================== -->
+    <main id="page-tasks" class="page-section">
+
+      <!-- Банк задач с разделением по энергии и риску (А / Б / В) -->
+      <section class="card">
+        <div class="card-header-row">
+          <h2>📋 Банк задач и объектов</h2>
+          <span class="energy-tag" id="tasks-count-badge">0 задач</span>
+        </div>
+        <p class="card-desc">
+          Разделяй задачи по энергоёмкости и категории риска. При высоком заряде приложение предложит <strong>Тяжёлые (Кат. А)</strong>, при низком — <strong>Лёгкие (Кат. В)</strong>, а в выходной — <strong>Мечты и поездки</strong>.
+        </p>
+
+        <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
+          <div class="custom-slot-form">
+            <input type="text" id="backlog-task-input" placeholder="Например: Узлы и конструктив по Падел-клубу..." />
+            <button id="voice-backlog-btn" class="voice-btn" onclick="startVoiceInput('backlog-task-input', 'voice-backlog-btn')">🎤</button>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <select id="backlog-task-complexity" class="select-input">
+              <option value="heavy">🔴 Тяжёлая (Кат. А — много сил / давно откладывал)</option>
+              <option value="medium">🟡 Средняя (Кат. Б — стоп-точка / чек-лист смежникам)</option>
+              <option value="light">🟢 Лёгкая (Кат. В — быстрая рутина / мало сил)</option>
+              <option value="dream">🌟 Мечта / Выходной (куда съездить и где побывать)</option>
+            </select>
+            <button class="btn-primary" onclick="addBacklogTask()">Добавить</button>
+          </div>
+        </div>
+
+        <ul id="backlog-tasks-list" class="tomorrow-list"></ul>
+      </section>
+
+      <!-- Вечерняя выгрузка мыслей на завтра -->
+      <section class="card tomorrow-card">
+        <div class="section-header">
+          <h2>🌙 Мысли и задачи на завтра</h2>
+          <span class="status-sub">Чтобы утром не вспоминать</span>
+        </div>
+
+        <div class="custom-slot-form">
+          <input type="text" id="tomorrow-input" placeholder="Например: согласовать лестницу и поручень с Олегом..." />
+          <button id="voice-tomorrow-btn" class="voice-btn" onclick="startVoiceInput('tomorrow-input', 'voice-tomorrow-btn')">🎤</button>
+          <button class="btn-primary" onclick="addTomorrowTask()">+</button>
+        </div>
+
+        <ul id="tomorrow-list" class="tomorrow-list"></ul>
+
+        <button class="btn-secondary" onclick="transferTomorrowToToday()">
+          Перенести задачи в сегодняшний план →
+        </button>
+      </section>
+
+      <!-- Стоп-точки (Hold Points) и защита от «спасательства» -->
+      <section class="card">
+        <h2>🛑 Контрольные стоп-точки (Hold Points)</h2>
+        <p class="card-desc">
+          Не закрывай работы за смежников и подрядчиков. Приёмка этапа или платежа только при наличии 3 подтверждений:
+        </p>
+        <div class="hold-points-list">
+          <label class="hold-point-item">
+            <input type="checkbox" id="hp-quality" onchange="saveHoldPoints()" />
+            <span><strong>1. Качество:</strong> узел выполнен по проекту без отступлений</span>
+          </label>
+          <label class="hold-point-item">
+            <input type="checkbox" id="hp-volume" onchange="saveHoldPoints()" />
+            <span><strong>2. Объём:</strong> фактические замеры сходятся со сметой</span>
+          </label>
+          <label class="hold-point-item">
+            <input type="checkbox" id="hp-docs" onchange="saveHoldPoints()" />
+            <span><strong>3. Документация:</strong> исполнительная схема и акты предоставлены подрядчиком</span>
+          </label>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ==================== СТРАНИЦА 4: ЗДОРОВЬЕ И СОН (HEALTHKIT) ==================== -->
+    <main id="page-health" class="page-section">
+
+      <section class="card">
+        <div class="card-header-row">
+          <h2>❤️ Синхронизация Apple HealthKit</h2>
+          <span class="energy-tag" id="healthkit-sync-status">Готово к обмену</span>
+        </div>
+        <p class="card-desc">
+          При запуске приложение запрашивает данные из «Здоровья» (через нативный мост HealthKit или команду iOS Shortcuts): общее время сна, фазу глубокого сна, время отхода ко сну и активные калории.
+        </p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+          <button class="btn-primary" onclick="requestHealthKitAccess()">🔄 Запросить доступ HealthKit</button>
+          <button class="chip" onclick="openShortcutGuideModal()">📲 Как подключить авто-синхронизацию iOS</button>
+        </div>
+
+        <!-- Интерактивные ползунки параметров сна и нагрузки -->
+        <div class="health-slider-group">
+          <div class="health-control-row">
+            <div class="health-control-header">
+              <span>🌙 Общее время сна (8+ ч = 100% базы)</span>
+              <span class="health-control-val" id="val-sleep-hours">8.0 ч</span>
+            </div>
+            <input type="range" id="input-sleep-hours" min="3" max="10" step="0.5" value="8" oninput="updateHealthParamsFromUI()" />
+          </div>
+
+          <div class="health-control-row">
+            <div class="health-control-header">
+              <span>🌊 Фаза глубокого сна (цель: 3.0 ч)</span>
+              <span class="health-control-val" id="val-deep-sleep">3.0 ч</span>
+            </div>
+            <input type="range" id="input-deep-sleep" min="0.5" max="4.0" step="0.25" value="3.0" oninput="updateHealthParamsFromUI()" />
+          </div>
+
+          <div class="health-control-row">
+            <div class="health-control-header">
+              <span>🕙 Время отхода ко сну (до 23:00 — бонус)</span>
+              <input type="time" id="input-bedtime" value="22:45" onchange="updateHealthParamsFromUI()" style="background:var(--bg-card); color:var(--text-main); border:1px solid var(--border-color); border-radius:6px; padding:4px 8px;" />
+            </div>
+          </div>
+
+          <div class="health-control-row">
+            <div class="health-control-header">
+              <span>🔥 Физическая нагрузка (активные ккал)</span>
+              <span class="health-control-val" id="val-calories">420 ккал</span>
+            </div>
+            <input type="range" id="input-calories" min="100" max="1500" step="50" value="420" oninput="updateHealthParamsFromUI()" />
+          </div>
+
+          <div class="health-control-row">
+            <div class="health-control-header">
+              <span>💓 Пульс в покое (восстановление)</span>
+              <span class="health-control-val" id="val-resting-hr">59 уд/мин</span>
+            </div>
+            <input type="range" id="input-resting-hr" min="45" max="95" step="1" value="59" oninput="updateHealthParamsFromUI()" />
+          </div>
+        </div>
+      </section>
+
+      <!-- Прозрачная расшифровка формулы батареи -->
+      <section class="card">
+        <h2>🧮 Расчёт формулы твоей энергии</h2>
+        <p class="card-desc">Как показатели сна и нагрузки складываются в итоговый заряд батареи:</p>
+        <div id="formula-breakdown" class="formula-breakdown">
+          <!-- Заполняется через JS -->
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- Нижняя навигация (Многостраничное переключение) -->
+  <nav class="bottom-nav">
+    <div class="bottom-nav-inner">
+      <button id="nav-home" class="nav-tab active" onclick="switchPage('home')">
+        <span class="nav-icon">🏠</span>
+        <span>Сводка</span>
+      </button>
+      <button id="nav-calendar" class="nav-tab" onclick="switchPage('calendar')">
+        <span class="nav-icon">📅</span>
+        <span>Календарь</span>
+      </button>
+      <button id="nav-tasks" class="nav-tab" onclick="switchPage('tasks')">
+        <span class="nav-icon">📋</span>
+        <span>Задачи</span>
+      </button>
+      <button id="nav-health" class="nav-tab" onclick="switchPage('health')">
+        <span class="nav-icon">❤️</span>
+        <span>Здоровье</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Модальное окно: Свой слот расписания -->
+  <div id="add-slot-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Добавить слот в план</h3>
+        <button class="mini-btn" onclick="closeAddSlotModal()">✕</button>
+      </div>
+      <label>Время (например, 14:00 — 15:30)</label>
+      <input type="text" id="new-slot-time" placeholder="14:00 — 15:30" />
+
+      <label>Задача или окно</label>
+      <input type="text" id="new-slot-title" placeholder="Например: Выезд на объект" />
+
+      <label>Уровень нагрузки</label>
+      <select id="new-slot-energy">
+        <option value="high">🔥 Высокая концентрация (Кат. А)</option>
+        <option value="medium">⚡ Средний темп (Кат. Б)</option>
+        <option value="low">🌿 Лёгкий темп / Отдых (Кат. В)</option>
+        <option value="free">✨ Свободное окно</option>
+      </select>
+
+      <button class="btn-primary" onclick="saveNewSlot()">Сохранить</button>
+    </div>
+  </div>
+
+  <!-- Модальное окно: Умный будильник -->
+  <div id="alarm-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>🔔 Утренний будильник</h3>
+        <button class="mini-btn" onclick="closeAlarmModal()">✕</button>
+      </div>
+      <p class="card-desc">В указанное время сработает сигнал и откроется утренний вопрос «Будний или Выходной» с расчётом заряда батареи.</p>
+
+      <label>Время подъёма</label>
+      <input type="time" id="alarm-time-input" value="07:30" />
+
+      <div class="toggle-row">
+        <span>Включить будильник</span>
+        <input type="checkbox" id="alarm-enabled-input" checked />
+      </div>
+
+      <button class="btn-secondary" onclick="requestNotificationPermission()">Разрешить уведомления на телефоне</button>
+      <button class="btn-primary" onclick="saveAlarmSettings()">Сохранить будильник</button>
+    </div>
+  </div>
+
+  <!-- Модальное окно: Ввод шагов -->
+  <div id="steps-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>👟 Шаги (Apple / Huawei Health)</h3>
+        <button class="mini-btn" onclick="closeStepsModal()">✕</button>
+      </div>
+      <p class="card-desc">Введи текущее количество шагов или передай автоматически через Команду iOS:</p>
+      <input type="number" id="steps-input" placeholder="Например: 6500" />
+      <button class="btn-primary" onclick="saveStepsManual()">Обновить шаги</button>
+    </div>
+  </div>
+
+  <!-- Модальное окно: Инструкция автосинхронизации HealthKit через Команды iOS -->
+  <div id="shortcut-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📲 Авто-передача из Apple Здоровье</h3>
+        <button class="mini-btn" onclick="closeShortcutGuideModal()">✕</button>
+      </div>
+      <p class="card-desc">
+        Чтобы iPhone сам передавал фазы сна, глубокий сон, шаги и калории при открытии приложения, используй ссылку с параметрами в приложении «Команды» (Shortcuts):
+      </p>
+      <div class="code-box" id="shortcut-url-preview">
+        ?sleep=8.0&amp;deep=3.0&amp;bedtime=22:45&amp;calories=420&amp;steps=5400
+      </div>
+      <button class="btn-primary" onclick="closeShortcutGuideModal()">Понятно</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
