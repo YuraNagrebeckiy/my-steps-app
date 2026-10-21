@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>Ритм Дня — Личный Ресурс • Юрий Нагребецкий</title>
+    <title>Ритм Дня v4.1 — Личный Ресурс • Юрий Нагребецкий</title>
 
     <!-- Настройки PWA для iPhone 16 Pro Max (iOS 27.0.1) -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -15,6 +15,9 @@
     <link rel="manifest" href="manifest.json" />
     <link rel="apple-touch-icon" href="icon-192.png" />
     <link rel="stylesheet" href="style.css" />
+
+    <!-- Официальная библиотека авторизации Google Identity Services (Calendar API v3 & Tasks API v1) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
     <!-- Фоновое биометрическое свечение -->
@@ -33,9 +36,9 @@
                     <span class="user-subtitle">ЮРИЙ НАГРЕБЕЦКИЙ • ЛИЧНЫЙ РЕСУРС</span>
                     <div class="title-row">
                         <h1 class="main-title">РИТМ ДНЯ</h1>
-                        <span class="sync-live-pill" id="sync-status-pill" onclick="triggerAutoSyncNow()" title="Нажмите для мгновенной синхронизации">
+                        <span class="sync-live-pill" id="sync-status-pill" onclick="openSyncHubModal()" title="Открыть центр синхронизации Apple и Google">
                             <span class="sync-dot"></span>
-                            <span id="sync-pill-text">HealthKit Live</span>
+                            <span id="sync-pill-text">Синхр. v4.1</span>
                         </span>
                     </div>
                     <span class="date-subtitle" id="current-date">ВТОРНИК, 20 ОКТЯБРЯ</span>
@@ -109,15 +112,12 @@
 
                     <!-- 3D СТЕКЛЯННЫЙ ЦИЛИНДР БАТАРЕИ -->
                     <div class="battery-3d-wrapper">
-                        <!-- Верхний металлический терминал и крышка цилиндра -->
                         <div class="battery-cap-top">
                             <div class="battery-terminal-nub"></div>
                             <div class="battery-rim-ellipse"></div>
                         </div>
 
-                        <!-- Стеклянная колба -->
                         <div class="battery-glass-body" id="battery-glass-body">
-                            <!-- Внутренние восходящие частицы энергии -->
                             <div class="energy-particles">
                                 <span class="particle p1"></span>
                                 <span class="particle p2"></span>
@@ -127,19 +127,16 @@
                                 <span class="particle p6"></span>
                             </div>
 
-                            <!-- Жидкостное неоновое заполнение (высота меняется динамически) -->
                             <div class="battery-liquid-fill" id="battery-bar-fill" style="height: 92%;">
                                 <div class="liquid-top-meniscus"></div>
                                 <div class="liquid-wave-layer"></div>
                             </div>
 
-                            <!-- Контент поверх цилиндра -->
                             <div class="battery-core-overlay">
                                 <div class="battery-percentage" id="sleep-score">92%</div>
                                 <div class="battery-status-main" id="battery-state-tag">ПОЛНЫЙ СИЛ</div>
                                 <div class="battery-status-sub" id="battery-sub-tag">ОПТИМАЛЬНЫЙ РЕСУРС</div>
 
-                                <!-- Молния и живая ЭКГ волна внутри нижней части батареи -->
                                 <div class="battery-ecg-row">
                                     <svg viewBox="0 0 160 40" class="battery-internal-ecg">
                                         <path d="M0,22 L28,22 L36,10 L44,32 L52,14 L60,24 L74,22 M86,22 L102,22 L110,8 L118,33 L126,12 L134,22 L160,22" />
@@ -148,19 +145,17 @@
                                 </div>
                             </div>
 
-                            <!-- Блики 3D-стекла -->
                             <div class="glass-reflection-left"></div>
                             <div class="glass-reflection-right"></div>
                         </div>
 
-                        <!-- Нижнее основание цилиндра -->
                         <div class="battery-cap-bottom"></div>
                     </div>
                 </div>
 
                 <!-- Подпись под орбитальной шкалой + статус динамического расхода -->
                 <div class="hud-caption-curve">
-                    <span>Заряд энергии (HealthKit + Нагрузка)</span>
+                    <span>Заряд энергии (HealthKit + Нагрузка + Задачи)</span>
                 </div>
                 <div class="live-drain-ticker" id="live-drain-indicator">
                     <span class="drain-rate-badge" id="drain-rate-badge">⚡ Фоновый расход: −2.8% / ч</span>
@@ -214,7 +209,6 @@
 
             <!-- СЕТКА BENTO 2x2: СОН, ГЛУБОКИЙ СОН, НАГРУЗКА, ШАГИ -->
             <section class="bento-metrics-grid">
-                <!-- 1. Сон -->
                 <div class="bento-card bento-sleep" onclick="switchPage('health')">
                     <div class="bento-left">
                         <div class="bento-icon-circle cyan-glow">🌙</div>
@@ -226,7 +220,6 @@
                     <div class="bento-moon-graphic"></div>
                 </div>
 
-                <!-- 2. Восстановление (Глубокий сон) -->
                 <div class="bento-card bento-deep" onclick="switchPage('health')">
                     <div class="bento-left">
                         <div class="bento-icon-circle purple-glow">🟣</div>
@@ -237,7 +230,6 @@
                     </div>
                 </div>
 
-                <!-- 3. Нагрузка (Калории) -->
                 <div class="bento-card bento-calories" onclick="switchPage('health')">
                     <div class="bento-left">
                         <div class="bento-icon-circle amber-glow">🔥</div>
@@ -248,7 +240,6 @@
                     </div>
                 </div>
 
-                <!-- 4. Шаги (Huawei / Apple Health) -->
                 <div class="bento-card bento-steps" onclick="openStepsModal()">
                     <div class="bento-left">
                         <div class="bento-icon-circle silver-glow">👟</div>
@@ -263,7 +254,7 @@
                 </div>
             </section>
 
-            <!-- СЕЙЧАС В ФОКУСЕ (АКТИВНЫЙ СЛОТ С РАСХОДОМ ЭНЕРГИИ В РЕАЛЬНОМ ВРЕМЕНИ) -->
+            <!-- СЕЙЧАС В ФОКУСЕ -->
             <section class="glass-card focus-live-card">
                 <div class="focus-card-header">
                     <div class="focus-badge-group">
@@ -317,20 +308,24 @@
 
         </main>
 
-        <!-- ==================== СТРАНИЦА 2: КАЛЕНДАРЬ И ПЛАН ДНЯ ==================== -->
+        <!-- ==================== СТРАНИЦА 2: КАЛЕНДАРЬ И ПЛАН ДНЯ (v4.1 DUAL-CONTOUR) ==================== -->
         <main id="page-calendar" class="page-section">
             <section class="glass-card">
                 <div class="card-header-row">
-                    <h2>📅 Интеграция с Календарём и Энергобаланс</h2>
-                    <button class="btn-primary-neon" onclick="syncGoogleCalendarDemo()">Синхронизировать</button>
+                    <h2>📅 Календарь (Apple iOS + Google Calendar)</h2>
+                    <button class="btn-primary-neon" onclick="openSyncHubModal()">🔄 Синхронизировать</button>
                 </div>
-                <p class="card-desc">
-                    Система сопоставляет расписание со скоростью твоего утомления: защищает первый утренний час под Категорию А и автоматически рассчитывает остаток сил после каждого слота.
+                <p class="card-desc" id="calendar-sync-status-text">
+                    Двухконтурная синхронизация: импорт реальных встреч из Apple Календаря (через команду RitmSync) и Google Calendar API v3 с автоматической генерацией свободных окон.
                 </p>
                 <div class="quick-chips" style="margin-top: 10px;">
-                    <button class="chip" onclick="autoFillScheduleByEnergy()">✨ Заполнить окна под мой заряд</button>
-                    <button class="chip" onclick="protectMorningBlock()">🛡️ Защитить 1-й час (Категория А)</button>
-                    <button class="chip" onclick="openAddSlotModal()">+ Добавить свой слот</button>
+                    <button class="chip" onclick="runRitmSyncShortcut()">📲 Запустить RitmSync (iOS)</button>
+                    <button class="chip" onclick="triggerGoogleCloudSync()">☁️ Google Calendar & Tasks API</button>
+                    <button class="chip" onclick="autoFillScheduleByEnergy()">✨ Заполнить окна под заряд</button>
+                    <button class="chip" onclick="protectMorningBlock()">🛡️ Защитить 1-й час (Кат. А)</button>
+                    <button class="chip" onclick="cleanupDuplicateSlots()">🧹 Очистить дубликаты</button>
+                    <button class="chip" onclick="resetScheduleToDefault()">🔄 Сбросить план дня</button>
+                    <button class="chip" onclick="openAddSlotModal()">+ Свой слот</button>
                 </div>
             </section>
 
@@ -343,16 +338,25 @@
             </section>
         </main>
 
-        <!-- ==================== СТРАНИЦА 3: ЗАДАЧИ, ОБЪЕКТЫ И СТОП-ТОЧКИ ==================== -->
+        <!-- ==================== СТРАНИЦА 3: ЗАДАЧИ, НАПОМИНАНИЯ И СТОП-ТОЧКИ ==================== -->
         <main id="page-tasks" class="page-section">
             <section class="glass-card">
                 <div class="card-header-row">
-                    <h2>📋 Банк задач по энергоёмкости (А / Б / В)</h2>
-                    <span class="energy-tag" id="tasks-count-badge">5 задач</span>
+                    <h2>📋 Банк задач (Apple Напоминания + Google Tasks)</h2>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <span class="energy-tag" id="tasks-count-badge">5 задач</span>
+                        <button class="hud-icon-btn" onclick="openSyncHubModal()" title="Синхронизировать с Apple Reminders и Google Tasks">🔄 Синхр.</button>
+                    </div>
                 </div>
                 <p class="card-desc">
-                    Задачи разной сложности утомляют с разной скоростью. Приложение блокирует «спасательство» и подбирает задачи строго под твой текущий заряд батареи.
+                    Входящие задачи из Apple Reminders и Google Tasks автоматически классифицируются по энергоёмкости (А / Б / В) и подбираются под текущий заряд батареи.
                 </p>
+
+                <div class="quick-chips">
+                    <button class="chip" onclick="runRitmSyncShortcut()">📲 Импорт из Напоминаний iOS</button>
+                    <button class="chip" onclick="triggerGoogleCloudSync()">☁️ Импорт из Google Tasks</button>
+                    <button class="chip" onclick="openNativeAppleReminders()">🍎 Открыть Напоминания</button>
+                </div>
 
                 <div class="task-filter-row">
                     <button class="chip active" onclick="filterTasks('all')">Все</button>
@@ -363,11 +367,12 @@
 
                 <div class="task-add-box">
                     <div class="custom-slot-form">
-                        <input type="text" id="tomorrow-input" placeholder="Новая задача или мысль на завтра..." />
+                        <input type="text" id="tomorrow-input" placeholder="Новая задача (авто-определение А/Б/В по тексту)..." />
                         <button id="voice-task-btn" class="voice-btn" onclick="startVoiceInput('tomorrow-input', 'voice-task-btn')">🎤</button>
                     </div>
                     <div class="task-add-bottom">
                         <select id="task-category-select" class="select-input">
+                            <option value="AUTO" selected>🤖 Авто-распознавание категории по тексту</option>
                             <option value="A">🔴 Кат. А — Тяжёлая (Узлы / Высокий риск: −5.0%/ч)</option>
                             <option value="B">🟡 Кат. Б — Средняя (Стоп-точка / Чек-лист: −2.8%/ч)</option>
                             <option value="C">🟢 Кат. В — Лёгкая (Рутина / Фиксация: −1.2%/ч)</option>
@@ -401,19 +406,19 @@
                     <span class="energy-tag" id="healthkit-sync-status">iOS 27.0.1 Активно</span>
                 </div>
                 <p class="card-desc" id="last-sync-label">
-                    Синхронизация: iPhone 16 Pro Max (HUAWEI Health → Apple HealthKit → Ритм Дня).
+                    Синхронизация: iPhone 16 Pro Max (HUAWEI Health → Apple HealthKit → Ритм Дня v4.1).
                 </p>
 
                 <div class="quick-chips" style="margin: 12px 0;">
-                    <button class="btn-primary-neon" onclick="triggerAutoSyncNow()">🔄 Синхронизировать со Здоровьем сейчас</button>
-                    <button class="chip" onclick="openPermissionsModal()">🛡️ Настроить разрешения и автозапуск</button>
+                    <button class="btn-primary-neon" onclick="runRitmSyncShortcut()">🔄 Запустить команду RitmSync (HealthKit + Календарь)</button>
+                    <button class="chip" onclick="openPermissionsModal()">🛡️ Разрешения iOS</button>
                 </div>
 
                 <!-- Ползунки биометрии для тонкой калибровки и теста -->
                 <div class="health-slider-group">
                     <div class="health-control-row">
                         <div class="health-control-header">
-                            <span>🌙 Общее время сна (8.0+ ч = 100% базы)</span>
+                            <span>🌙 Общее время сна (8.0+ ч = 70% базы)</span>
                             <span class="health-control-val" id="val-sleep-hours">8.2 ч</span>
                         </div>
                         <input type="range" id="slider-sleep" min="3.0" max="10.0" step="0.1" value="8.2" oninput="updateHealthMetric('sleepHours', this.value)" />
@@ -463,24 +468,30 @@
             <!-- Прозрачная расшифровка формулы заряда и расхода -->
             <section class="glass-card">
                 <h2>🧮 Математическая расшифровка заряда и расхода</h2>
-                <p class="card-desc">Как сон, глубокая фаза, время отбоя и выполненные задачи формируют текущий процент батареи:</p>
+                <p class="card-desc">Раздельный показ биометрической базы HealthKit и динамического вычета по закрытым задачам:</p>
                 <div id="formula-breakdown" class="formula-breakdown"></div>
             </section>
 
-            <!-- Протокол автоматической синхронизации URL для Команд iOS -->
+            <!-- Протокол автоматической синхронизации URL для Команд iOS (Разделены шаблон переменных и тест) -->
             <section class="glass-card">
-                <h2>📲 Протокол автосинхронизации iPhone 16 Pro Max (iOS 27.0.1)</h2>
+                <h2>📲 Шаблон с динамическими переменными для «Команд» iOS (RitmSync)</h2>
                 <p class="card-desc">
-                    Скопируй эту ссылку в действие «Открыть URL» внутри приложения «Команды» (Shortcuts) с именем команды <strong>RitmSync</strong>:
+                    Внимание: чтобы ежедневная автоматизация в 10:00 не отправляла вчерашние фиксированные цифры, в действии «Открыть URL» приложения «Команды» подставьте переменные iOS вместо скобок:
+                </p>
+                <div class="code-box" id="healthkit-shortcut-template" onclick="copyShortcutTemplateUrl()"></div>
+                <button class="btn-primary-neon" style="width:100%; margin-top: 8px;" onclick="copyShortcutTemplateUrl()">📋 Скопировать шаблон для «Команд» iOS</button>
+
+                <p class="card-desc" style="margin-top: 14px;">
+                    Тестовая ссылка с текущими числами на экране (для проверки парсера):
                 </p>
                 <div class="code-box" id="healthkit-shortcut-url" onclick="copyShortcutUrl()"></div>
-                <button class="btn-secondary-neon" style="margin-top: 10px;" onclick="copyShortcutUrl()">📋 Скопировать URL-протокол</button>
+                <button class="btn-secondary-neon" style="margin-top: 8px;" onclick="copyShortcutUrl()">📋 Скопировать тестовую ссылку</button>
             </section>
         </main>
 
     </div>
 
-    <!-- НИЖНЯЯ НАВИГАЦИОННАЯ ПАНЕЛЬ (4 ВКЛАДКИ КАК НА МАКЕТЕ) -->
+    <!-- НИЖНЯЯ НАВИГАЦИОННАЯ ПАНЕЛЬ (4 ВКЛАДКИ) -->
     <nav class="bottom-nav">
         <div class="bottom-nav-inner">
             <button id="nav-home" class="nav-tab active" onclick="switchPage('home')">
@@ -502,6 +513,58 @@
         </div>
     </nav>
 
+    <!-- МОДАЛЬНОЕ ОКНО: ЕДИНЫЙ ХАБ СИНХРОНИЗАЦИИ (APPLE iOS + GOOGLE CLOUD + ICS) -->
+    <div id="sync-hub-modal" class="modal hidden">
+        <div class="modal-content modal-neon">
+            <div class="modal-header">
+                <h3>🔄 Центр синхронизации v4.1 (Apple + Google)</h3>
+                <button class="mini-btn" onclick="closeAllModals()">✕</button>
+            </div>
+            <p class="card-desc">
+                Выберите контур синхронизации для загрузки биометрии, реальных встреч Календаря и списка Задач:
+            </p>
+
+            <div class="perm-list">
+                <!-- Контур 1: Системный мост iOS Shortcuts -->
+                <div class="perm-item" style="flex-direction: column; align-items: stretch;">
+                    <div>
+                        <strong>1. Системный мост iPhone (Команда RitmSync)</strong>
+                        <p>Одним вызовом забирает сон и шаги из HealthKit, события Apple/Google Календаря и Напоминания iOS</p>
+                    </div>
+                    <div style="display:flex; gap:8px; margin-top:6px;">
+                        <button class="btn-primary-neon" style="flex:1;" onclick="runRitmSyncShortcut()">📲 Запустить RitmSync</button>
+                        <button class="perm-btn" onclick="openNativeAppleCalendar()">📅 Календарь iOS</button>
+                    </div>
+                </div>
+
+                <!-- Контур 2: Прямое подключение Google Calendar API & Google Tasks API -->
+                <div class="perm-item" style="flex-direction: column; align-items: stretch;">
+                    <div>
+                        <strong>2. Облако Google (Calendar API v3 + Tasks API v1)</strong>
+                        <p>Прямая OAuth 2.0 загрузка сегодняшних встреч из Google Календаря и активных задач из Google Tasks</p>
+                    </div>
+                    <input type="text" id="google-client-id-input" placeholder="Google OAuth Client ID (опционально для прямого API)" style="margin-top:6px; font-size:0.74rem; padding:8px; border-radius:8px; background:#050912; color:#fff; border:1px solid rgba(255,255,255,0.16);" />
+                    <button class="btn-secondary-neon" style="margin-top:6px;" onclick="triggerGoogleCloudSync()">☁️ Авторизовать и синхронизировать Google</button>
+                </div>
+
+                <!-- Контур 3: Быстрая вставка текста расписания/задач или импорт .ics -->
+                <div class="perm-item" style="flex-direction: column; align-items: stretch;">
+                    <div>
+                        <strong>3. Импорт файла .ics или быстрая вставка списка</strong>
+                        <p>Загрузите файл календаря (.ics) из Apple iCloud / Google или вставьте список встреч (`10:30-12:00|Встреча`)</p>
+                    </div>
+                    <input type="file" id="ics-file-input" accept=".ics,text/calendar" onchange="importIcsCalendar(event)" style="font-size:0.74rem; margin-top:6px; color:var(--neon-cyan);" />
+                    <div style="display:flex; gap:6px; margin-top:6px;">
+                        <input type="text" id="quick-cal-paste-input" placeholder="10:30-12:30|Выезд ЖК Lucky; 14:30-16:00|Созвон с Олегом" style="flex:1; font-size:0.74rem; padding:8px; border-radius:8px; background:#050912; color:#fff; border:1px solid rgba(255,255,255,0.16);" />
+                        <button class="perm-btn" onclick="importQuickPastedEvents()">Импорт</button>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-secondary-neon" style="margin-top:8px;" onclick="closeAllModals()">Закрыть</button>
+        </div>
+    </div>
+
     <!-- МОДАЛЬНОЕ ОКНО ПЕРВОГО ЗАПУСКА: ЗАПРОС РАЗРЕШЕНИЙ И ПРОТОКОЛОВ (iOS 27.0.1) -->
     <div id="permissions-modal" class="modal hidden">
         <div class="modal-content modal-neon">
@@ -510,7 +573,7 @@
                 <button class="mini-btn" onclick="closePermissionsModal()">✕</button>
             </div>
             <p class="card-desc">
-                Для автоматического расчёта заряда батареи и синхронизации с <strong>HUAWEI Здоровье</strong> и <strong>Apple Здоровье (iOS 27.0.1)</strong> подтвердите разрешения:
+                Для автоматического расчёта заряда батареи и синхронизации с <strong>HUAWEI Здоровье</strong>, <strong>Apple Здоровье (iOS 27.0.1)</strong>, Календарём и Задачами подтвердите разрешения:
             </p>
 
             <div class="perm-list">
@@ -532,8 +595,8 @@
 
                 <div class="perm-item">
                     <div>
-                        <strong>3. Авто-расход энергии от задач</strong>
-                        <p>Динамический учёт утомления по категориям А (−5%/ч), Б (−2.8%/ч), В (−1.2%/ч)</p>
+                        <strong>3. Двухконтурный мост Календаря и Задач</strong>
+                        <p>Авто-классификация встреч и напоминаний по категориям А (−5%/ч), Б (−2.8%/ч), В (−1.2%/ч)</p>
                     </div>
                     <span class="perm-status-ok">Активно ✓</span>
                 </div>
@@ -601,7 +664,7 @@
             <p class="card-desc">Введите количество шагов или запустите автосинхронизацию:</p>
             <input type="number" id="steps-input" placeholder="5120" />
             <div style="display:flex; gap:8px; margin-top:8px;">
-                <button class="btn-secondary-neon" style="flex:1;" onclick="triggerAutoSyncNow()">🔄 Автосинк</button>
+                <button class="btn-secondary-neon" style="flex:1;" onclick="runRitmSyncShortcut()">🔄 RitmSync</button>
                 <button class="btn-primary-neon" style="flex:1;" onclick="saveStepsManual()">Сохранить</button>
             </div>
         </div>
