@@ -200,7 +200,6 @@ body {
     user-select: none;
 }
 
-/* Угловые мини-осциллографы */
 .hud-corner {
     position: absolute;
     width: 82px;
@@ -255,7 +254,6 @@ body {
     100% { stroke-dashoffset: 0; }
 }
 
-/* Орбитальная сцена */
 .orbital-stage {
     position: relative;
     width: 286px;
@@ -303,7 +301,6 @@ body {
     to { transform: rotate(360deg); }
 }
 
-/* Иконки на орбите */
 .orbital-node {
     position: absolute;
     width: 26px;
@@ -325,7 +322,6 @@ body {
 .node-bottom-left { bottom: 26px; left: 32px; }
 .node-bottom-right { bottom: 26px; right: 32px; }
 
-/* 3D ЦИЛИНДР БАТАРЕИ (НАКЛОН КАК НА МАКЕТЕ) */
 .battery-3d-wrapper {
     position: relative;
     width: 126px;
@@ -387,7 +383,6 @@ body {
     z-index: 2;
 }
 
-/* Жидкость внутри батареи */
 .battery-liquid-fill {
     position: absolute;
     bottom: 0;
@@ -419,7 +414,6 @@ body {
     100% { transform: scaleY(1.18); filter: brightness(1.25); }
 }
 
-/* Квантовые пузырьки/частицы внутри цилиндра */
 .energy-particles {
     position: absolute;
     inset: 0;
@@ -453,7 +447,6 @@ body {
     100% { transform: translateY(-165px) scale(1.2); opacity: 0; }
 }
 
-/* Текст и ЭКГ поверх цилиндра */
 .battery-core-overlay {
     position: absolute;
     inset: 0;
@@ -648,7 +641,6 @@ body {
     margin-right: 4px;
 }
 
-/* Шкала риска перегрузки */
 .overload-meter-block {
     margin-bottom: 12px;
 }
@@ -691,7 +683,6 @@ body {
 .risk-med { color: var(--neon-amber); }
 .risk-high { color: var(--neon-rose); }
 
-/* Переключатель Будний/Выходной и Настроение */
 .context-switcher-strip {
     display: flex;
     flex-direction: column;
@@ -729,7 +720,6 @@ body {
     box-shadow: 0 0 12px rgba(0, 245, 212, 0.2);
 }
 
-/* 4 карточки детальных рекомендаций */
 .recommendations-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1012,7 +1002,6 @@ body {
     color: #fda4af;
 }
 
-/* Координатор окон и чипы */
 .energy-tag {
     font-size: 0.7rem;
     font-weight: 700;
@@ -1037,6 +1026,12 @@ body {
     border-radius: 99px;
     font-size: 0.75rem;
     cursor: pointer;
+}
+
+.chip.active {
+    background: rgba(0, 245, 212, 0.16);
+    border-color: var(--neon-cyan);
+    color: #fff;
 }
 
 .chip-recharge {
@@ -1283,8 +1278,7 @@ input[type="range"] {
 
 @keyframes fadeInPage {
     from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0);
-}
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .bottom-nav {
@@ -1359,7 +1353,9 @@ input[type="range"] {
     border-radius: 22px;
     padding: 20px;
     width: 100%;
-    max-width: 410px;
+    max-width: 420px;
+    max-height: 90dvh;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 10px;
