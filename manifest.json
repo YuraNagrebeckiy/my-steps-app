@@ -1,7 +1,7 @@
 {
   "name": "Ритм Дня — Личный Ресурс",
   "short_name": "Ритм Дня",
-  "description": "Биометрический координатор энергии, сна (HealthKit / Huawei Health) и задач Юрия Нагребецкого",
+  "description": "Биометрический координатор энергии, сна (HealthKit / Huawei Health), Календаря и Задач Юрия Нагребецкого",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#050912",
