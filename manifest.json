@@ -4,8 +4,8 @@
   "description": "Биометрический координатор энергии, сна (HealthKit / Huawei Health), Календаря и Задач Юрия Нагребецкого",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#041610",
-  "theme_color": "#041610",
+  "background_color": "#060b14",
+  "theme_color": "#060b14",
   "orientation": "portrait-primary",
   "icons": [
     {
