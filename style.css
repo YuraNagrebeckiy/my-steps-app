@@ -6,12 +6,36 @@
 }
 
 /* ============================================================================
-   ДИНАМИЧЕСКИЕ ЦВЕТОВЫЕ ТЕМЫ ИНТЕРФЕЙСА ОТ ЗАРЯДА БАТАРЕИ:
+   ДИНАМИЧЕСКИЕ ЦВЕТОВЫЕ ТЕМЫ ИНТЕРФЕЙСА:
+   0) До синхронизации (Пустой шаблон): нейтральный кибер-шаблон (body.theme-uninitialized)
    1) 80-100%: Светло-зелёный градиент от батареи (body.theme-high-green)
    2) 50-79%:  Светло-жёлтый градиент от батареи (body.theme-mid-yellow)
    3) <=49%:   Красно-жёлтый градиент от батареи (body.theme-low-red-yellow)
    ============================================================================ */
 :root,
+body.theme-uninitialized {
+    --bg-deep: #060b14;
+    --bg-gradient-top: #0f1e36;
+    --bg-gradient-mid: #091324;
+    --bg-card: rgba(14, 23, 38, 0.78);
+    --aura-bright: #38bdf8;
+    --aura-mid: #0ea5e9;
+    --aura-soft: #0284c7;
+    --aura-border: rgba(56, 189, 248, 0.40);
+    --aura-glow-shadow: rgba(56, 189, 248, 0.25);
+    --battery-liquid-grad: linear-gradient(180deg, #e0f2fe 0%, #38bdf8 50%, #0284c7 100%);
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --neon-cyan: #38bdf8;
+    --neon-green-bright: #4ade80;
+    --neon-amber: #facc15;
+    --neon-rose: #f43f5e;
+    --border-glass: rgba(148, 163, 184, 0.18);
+    --radius-xl: 22px;
+    --radius-lg: 16px;
+    --radius-md: 12px;
+}
+
 body.theme-high-green {
     --bg-deep: #041610;
     --bg-gradient-top: #0c3b28;
@@ -27,12 +51,7 @@ body.theme-high-green {
     --text-muted: #9cd1b4;
     --neon-cyan: #4ade80;
     --neon-green-bright: #86efac;
-    --neon-amber: #facc15;
-    --neon-rose: #f43f5e;
     --border-glass: rgba(134, 239, 172, 0.22);
-    --radius-xl: 22px;
-    --radius-lg: 16px;
-    --radius-md: 12px;
 }
 
 body.theme-mid-yellow {
@@ -84,7 +103,6 @@ body {
     transition: background-color 0.7s ease, background-image 0.7s ease, color 0.4s ease;
 }
 
-/* Фоновое объёмное свечение, исходящее градиентом от батареи */
 .ambient-bg {
     position: fixed;
     inset: 0;
@@ -172,7 +190,6 @@ button,
     -webkit-user-select: none;
 }
 
-/* Мгновенное физическое вдавливание и яркая вспышка при касании пальцем */
 button:active,
 .chip:active,
 .mode-pill:active,
@@ -190,7 +207,6 @@ button:active,
     box-shadow: 0 0 22px var(--aura-bright) !important;
 }
 
-/* Расходящаяся неоновая волна внутри кнопки при клике */
 .ripple-wave {
     position: absolute;
     border-radius: 50%;
@@ -208,7 +224,6 @@ button:active,
     }
 }
 
-/* Всплывающий тост-индикатор выполненного действия */
 .toast-notification {
     position: fixed;
     top: max(14px, env(safe-area-inset-top));
@@ -443,7 +458,7 @@ button:active,
     stroke: var(--aura-bright);
     stroke-width: 4;
     stroke-linecap: round;
-    stroke-dasharray: 620 860;
+    stroke-dasharray: 0 860;
     transform: rotate(-125deg);
     transform-origin: 50% 50%;
     filter: drop-shadow(0 0 10px var(--aura-bright));
@@ -543,10 +558,10 @@ button:active,
     bottom: 0;
     left: 0;
     right: 0;
-    height: 92%;
+    height: 0%;
     background: var(--battery-liquid-grad);
     box-shadow: 0 -8px 25px var(--aura-bright);
-    transition: height 0.85s cubic-bezier(0.22, 1, 0.36, 1), background 0.6s ease;
+    transition: height 0.95s cubic-bezier(0.22, 1, 0.36, 1), background 0.6s ease;
 }
 
 .liquid-top-meniscus {
@@ -571,6 +586,7 @@ button:active,
     inset: 0;
     z-index: 2;
     pointer-events: none;
+    transition: opacity 0.5s ease;
 }
 
 .particle {
@@ -622,7 +638,7 @@ button:active,
 }
 
 .battery-status-main {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 800;
     color: #ffffff;
     letter-spacing: 0.04em;
@@ -631,7 +647,7 @@ button:active,
 }
 
 .battery-status-sub {
-    font-size: 0.5rem;
+    font-size: 0.48rem;
     font-weight: 700;
     color: #f8fafc;
     letter-spacing: 0.05em;
@@ -706,6 +722,7 @@ button:active,
     font-weight: 700;
     color: var(--aura-bright);
     letter-spacing: 0.02em;
+    text-align: center;
 }
 
 .live-drain-ticker {
@@ -748,7 +765,53 @@ button:active,
     cursor: pointer;
 }
 
-/* ==================== ИНТЕРАКТИВНЫЕ КАРТОЧКИ ЗАДАЧ (УДОБНЫЙ ВЫБОР И ГАЛОЧКА ✓) ==================== */
+/* ==================== СЕТКА ПОЛЕЙ СИНХРОНИЗАЦИИ ==================== */
+.sync-inputs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 4px 0;
+}
+
+.sync-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sync-field label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.sync-progress-box {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--aura-border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin: 4px 0;
+}
+
+.empty-state-placeholder {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1.5px dashed var(--aura-border);
+    border-radius: 16px;
+    padding: 18px 14px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.empty-state-placeholder p {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    max-width: 320px;
+}
+
+/* ==================== ИНТЕРАКТИВНЫЕ КАРТОЧКИ ЗАДАЧ ==================== */
 .interactive-task-list {
     list-style: none;
     display: flex;
@@ -786,7 +849,6 @@ button:active,
     gap: 12px;
 }
 
-/* Большая удобная кнопка-галочка для отметки выполнения задачи */
 .task-check-btn {
     width: 38px;
     height: 38px;
@@ -885,7 +947,7 @@ button:active,
 }
 
 .rec-card-top h2 {
-    font-size: 1.02rem;
+    font-size: 0.98rem;
     font-weight: 800;
     letter-spacing: 0.03em;
     color: #ffffff;
@@ -903,7 +965,7 @@ button:active,
 }
 
 .rec-lead-text {
-    font-size: 0.88rem;
+    font-size: 0.86rem;
     color: var(--text-main);
     line-height: 1.45;
     margin-bottom: 12px;
@@ -1586,7 +1648,7 @@ input[type="range"] {
     box-shadow: 0 0 15px var(--aura-glow-shadow);
 }
 
-/* ==================== МОДАЛЬНЫЕ ОКНА (БЕЗ ОБРЕЗАНИЯ ШАПКИ) ==================== */
+/* ==================== МОДАЛЬНЫЕ ОКНА ==================== */
 .modal {
     position: fixed;
     inset: 0;
