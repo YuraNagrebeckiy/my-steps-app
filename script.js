@@ -1,15 +1,14 @@
 /**
- * Ритм Дня v4.2 — Биометрическая система управления энергией, Календарём и Задачами
+ * Ритм Дня v4.3 — Биометрическая система управления энергией, Календарём и Задачами
  * Оптимизировано для iPhone 16 Pro Max (iOS 27.0.1)
- * Новое в v4.2:
- *  - Автоматическая утренняя синхронизация при запуске и кнопка «Принудительное обновление»
- *  - Исправлено имя быстрой команды iOS на «Планировщик» (устранена ошибка RitmSync)
- *  - Крупные кнопки «✓ Выполнено» и «🎯 В фокус» для каждой задачи
- *  - Тактильный и визуальный отклик (ripple + звук + пружина + тост) на каждое нажатие
- *  - Цветовые градиенты интерфейса от батареи: 80-100% светло-зелёный, 50-79% светло-жёлтый, <=49% красно-жёлтый
+ * Ключевое отличие v4.3:
+ *  - При первом запуске (и до синхронизации) приложение находится в состоянии ПУСТОГО ШАБЛОНА (isSynced: false):
+ *    батарея 0% (--%), карточки Здоровья показывают прочерки (--), расписание Календаря и список Задач пусты.
+ *  - После синхронизации (через URL-параметры команды «Планировщик» или кнопку «🔄 Синхронизировать»)
+ *    подгружаются актуальные показатели состояния, задачи и слоты календаря, и включается цветовой градиент (80-100%, 50-79%, <=49%).
  */
 
-const STORAGE_KEY = 'ritm_dnya_state_v4_2';
+const STORAGE_KEY = 'ritm_dnya_state_v4_3';
 
 const TASK_ENERGY_RATES = {
     high: -5.0,    // Категория А: сложные узлы, конструктив, высокий риск
@@ -19,8 +18,9 @@ const TASK_ENERGY_RATES = {
     free: -0.5     // Свободное окно
 };
 
-const DEFAULT_SCHEDULE = [
-    { id: 'slot-1', start: '08:30', end: '09:30', title: 'Подъём по будильнику, завтрак, автосинк Планировщик → HealthKit', type: 'routine', energy: 'low', done: true },
+// Шаблоны расписания и задач, которые подгружаются ТОЛЬКО ПОСЛЕ СИНХРОНИЗАЦИИ
+const SYNCED_TEMPLATE_SCHEDULE = [
+    { id: 'slot-1', start: '08:30', end: '09:30', title: 'Подъём по будильнику, завтрак, синк Планировщик → HealthKit', type: 'routine', energy: 'low', done: true },
     { id: 'slot-2', start: '09:30', end: '10:30', title: 'Защищённый блок: Главная стратегическая задача (Категория А)', type: 'focus', energy: 'high', done: false },
     { id: 'slot-3', start: '10:30', end: '13:00', title: 'Свободное окно', type: 'free', energy: 'high', done: false },
     { id: 'slot-4', start: '13:00', end: '14:00', title: 'Обед и восстановление ресурса (без рабочих чатов)', type: 'break', energy: 'rest', done: false },
@@ -29,7 +29,17 @@ const DEFAULT_SCHEDULE = [
     { id: 'slot-7', start: '20:00', end: '21:00', title: 'Английский (Duolingo 15 мин) и вечерняя разгрузка', type: 'routine', energy: 'low', done: false }
 ];
 
-const defaultState = {
+const SYNCED_TEMPLATE_TASKS = [
+    { id: 'task-1', title: 'Согласовать с Олегом конструктив лестницы, узлы и поручень', category: 'A', complexity: 'high', done: false },
+    { id: 'task-2', title: 'Падел-клуб / ЖК Lucky — аудит критических узлов и стоп-точек приёмки', category: 'A', complexity: 'high', done: false },
+    { id: 'task-3', title: 'Проверить спецификацию по лаку и диффузоры вентиляции с Антоном', category: 'B', complexity: 'medium', done: false },
+    { id: 'task-4', title: 'Отправить подрядчику чек-лист приёмки вместо ручной переделки чертежей', category: 'B', complexity: 'medium', done: false },
+    { id: 'task-5', title: 'Зафиксировать 3 главных результата недели и предотвращённые риски', category: 'C', complexity: 'low', done: false }
+];
+
+// Состояние ПУСТОГО ШАБЛОНА при первом запуске (isSynced: false)
+const emptyInitialState = {
+    isSynced: false,
     dayType: 'work',
     morningMood: 'high',
     manualOffset: 0,
@@ -37,35 +47,29 @@ const defaultState = {
     shortcutName: 'Планировщик',
     selectedTaskId: null,
     health: {
-        sleepHours: 8.2,
-        deepSleepHours: 3.1,
-        bedtime: '22:45',
-        activeCalories: 310,
-        steps: 5120,
+        sleepHours: null,
+        deepSleepHours: null,
+        bedtime: '--:--',
+        activeCalories: null,
+        steps: null,
         stepsGoal: 10000,
-        restingHR: 58,
-        lastSync: 'Сегодня утром • Автосинхронизация активна',
-        lastSyncDate: new Date().toISOString().slice(0, 10)
+        restingHR: null,
+        lastSync: 'Шаблон пуст • Ожидание синхронизации',
+        lastSyncDate: null
     },
     syncMeta: {
-        lastCalendarSync: 'Синхронизировано при запуске',
+        lastCalendarSync: 'Ожидание синхронизации расписания',
         importedEventsCount: 0
     },
     holdPoints: [
-        { id: 'hp-1', title: 'Защищён первый утренний блок (60 мин на Категорию А без телефона)', done: true },
+        { id: 'hp-1', title: 'Защищён первый утренний блок (60 мин на Категорию А без телефона)', done: false },
         { id: 'hp-2', title: 'Стоп-точка 1 (Качество): узел выполнен по проекту без отступлений', done: false },
         { id: 'hp-3', title: 'Стоп-точка 2 (Объём): фактические замеры сходятся со сметой', done: false },
         { id: 'hp-4', title: 'Стоп-точка 3 (Документация): исполнительная схема и акты получены', done: false },
         { id: 'hp-5', title: 'Отказ от «спасательства»: вместо переделки за смежника выдан чек-лист', done: false }
     ],
-    schedule: JSON.parse(JSON.stringify(DEFAULT_SCHEDULE)),
-    tasks: [
-        { id: 'task-1', title: 'Согласовать с Олегом конструктив лестницы, узлы и поручень', category: 'A', complexity: 'high', done: false },
-        { id: 'task-2', title: 'Падел-клуб / ЖК Lucky — аудит критических узлов и стоп-точек приёмки', category: 'A', complexity: 'high', done: false },
-        { id: 'task-3', title: 'Проверить спецификацию по лаку и диффузоры вентиляции с Антоном', category: 'B', complexity: 'medium', done: false },
-        { id: 'task-4', title: 'Отправить подрядчику чек-лист приёмки вместо ручной переделки чертежей', category: 'B', complexity: 'medium', done: false },
-        { id: 'task-5', title: 'Зафиксировать 3 главных результата недели и предотвращённые риски', category: 'C', complexity: 'low', done: false }
-    ],
+    schedule: [], // Пусто до синхронизации!
+    tasks: [],    // Пусто до синхронизации!
     activeTaskFilter: 'all',
     currentPage: 'home'
 };
@@ -117,7 +121,7 @@ function showToast(message, icon = '⚡') {
     if (toastTimeout) clearTimeout(toastTimeout);
     toastTimeout = setTimeout(() => {
         toast.classList.add('hidden');
-    }, 2200);
+    }, 2400);
 }
 
 function attachGlobalButtonRipple() {
@@ -143,26 +147,24 @@ function attachGlobalButtonRipple() {
 }
 
 /* =========================================================
-   2. ЗАГРУЗКА СОСТОЯНИЯ И ЗАЩИТА ОТ ДУБЛИКАТОВ
+   2. ЗАГРУЗКА СОСТОЯНИЯ И СБРОС В ПУСТОЙ ШАБЛОН
    ========================================================= */
 function loadState() {
     try {
-        const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('ritm_dnya_state_v4');
-        if (!raw) return JSON.parse(JSON.stringify(defaultState));
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return JSON.parse(JSON.stringify(emptyInitialState));
         const parsed = JSON.parse(raw);
-        const merged = {
-            ...defaultState,
+        return {
+            ...emptyInitialState,
             ...parsed,
-            health: { ...defaultState.health, ...(parsed.health || {}) },
-            syncMeta: { ...defaultState.syncMeta, ...(parsed.syncMeta || {}) },
-            schedule: Array.isArray(parsed.schedule) && parsed.schedule.length ? parsed.schedule : JSON.parse(JSON.stringify(DEFAULT_SCHEDULE)),
-            tasks: Array.isArray(parsed.tasks) && parsed.tasks.length ? parsed.tasks.map(t => ({ done: false, ...t })) : defaultState.tasks,
-            holdPoints: Array.isArray(parsed.holdPoints) ? parsed.holdPoints : defaultState.holdPoints
+            health: { ...emptyInitialState.health, ...(parsed.health || {}) },
+            syncMeta: { ...emptyInitialState.syncMeta, ...(parsed.syncMeta || {}) },
+            schedule: Array.isArray(parsed.schedule) ? deduplicateScheduleArray(parsed.schedule) : [],
+            tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+            holdPoints: Array.isArray(parsed.holdPoints) ? parsed.holdPoints : emptyInitialState.holdPoints
         };
-        merged.schedule = deduplicateScheduleArray(merged.schedule);
-        return merged;
     } catch (e) {
-        return JSON.parse(JSON.stringify(defaultState));
+        return JSON.parse(JSON.stringify(emptyInitialState));
     }
 }
 
@@ -174,8 +176,16 @@ function saveState() {
     }
 }
 
+// Сброс в чистый пустой шаблон (как при самом первом запуске)
+function resetToEmptyTemplate() {
+    state = JSON.parse(JSON.stringify(emptyInitialState));
+    saveState();
+    renderAll();
+    showToast('Включён чистый пустой шаблон (ожидание синхронизации)', '🧹');
+}
+
 function deduplicateScheduleArray(scheduleArr) {
-    if (!Array.isArray(scheduleArr)) return JSON.parse(JSON.stringify(DEFAULT_SCHEDULE));
+    if (!Array.isArray(scheduleArr)) return [];
     const seenKeys = new Set();
     let count1900 = 0;
     const cleaned = [];
@@ -199,78 +209,91 @@ function deduplicateScheduleArray(scheduleArr) {
     return cleaned.sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
 }
 
-function resetScheduleToDefault() {
-    state.schedule = JSON.parse(JSON.stringify(DEFAULT_SCHEDULE));
-    state.manualOffset = 0;
-    renderAll();
-    showToast('Расписание дня сброшено к базовому', '🔄');
-}
-
 /* =========================================================
-   3. УТРЕННЯЯ АВТОСИНХРОНИЗАЦИЯ И ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ
+   3. СИНХРОНИЗАЦИЯ И ЗАПОЛНЕНИЕ ПУСТОГО ШАБЛОНА ДАННЫМИ
    ========================================================= */
-function checkMorningAutoSync() {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const params = new URLSearchParams(window.location.search);
-    const hasUrlSync = params.has('autoSync') || params.has('sleep') || params.has('steps');
+function openLiveSyncModal() {
+    const modal = document.getElementById('live-sync-modal');
+    if (!modal) return;
 
-    // Если наступило новое утро — обновляем день автоматически
-    if (state.health.lastSyncDate !== todayStr) {
-        state.health.lastSyncDate = todayStr;
-        state.manualOffset = 0;
-        // Сбрасываем выполненные вчера слоты (кроме утреннего подъема)
-        state.schedule.forEach(s => {
-            if (s.id !== 'slot-1') s.done = false;
-        });
-        // Очищаем выполненные вчера разовые задачи
-        state.tasks = state.tasks.filter(t => !t.done);
-        const nowTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-        state.health.lastSync = `Утренняя автосинхронизация • ${nowTime}`;
-        saveState();
-        showToast('Доброе утро! Приложение синхронизировано на новый день', '☀️');
-    } else if (hasUrlSync) {
-        showToast('Данные из команды «Планировщик» загружены!', '📲');
+    // Если данные уже были синхронизированы, подставляем их в поля окна
+    if (state.isSynced && state.health.sleepHours !== null) {
+        document.getElementById('sync-input-sleep').value = state.health.sleepHours;
+        document.getElementById('sync-input-deep').value = state.health.deepSleepHours;
+        document.getElementById('sync-input-bedtime').value = state.health.bedtime !== '--:--' ? state.health.bedtime : '23:15';
+        document.getElementById('sync-input-steps').value = state.health.steps;
+        document.getElementById('sync-input-calories').value = state.health.activeCalories;
+        document.getElementById('sync-input-hr').value = state.health.restingHR;
     }
+
+    const shortcutInput = document.getElementById('shortcut-name-input');
+    if (shortcutInput) shortcutInput.value = state.shortcutName || 'Планировщик';
+
+    modal.classList.remove('hidden');
 }
 
-// Кнопка «🔄 Принудительное обновление» в шапке и вкладках
-function forceFullSync(showNotification = true) {
-    const pillText = document.getElementById('sync-pill-text');
-    if (pillText) pillText.textContent = '⏳ Синхр...';
+// Пошаговая синхронизация, которая заполняет пустой шаблон данными состояния, календаря и задач
+function executeLiveTemplateSync() {
+    const progressBox = document.getElementById('sync-progress-box');
+    const stepText = document.getElementById('sync-step-text');
+    const progressBar = document.getElementById('sync-progress-bar');
 
-    // 1. Читаем возможные URL-параметры
-    parseUrlHealthTelemetry();
+    if (progressBox) progressBox.classList.remove('hidden');
+    if (stepText) stepText.textContent = '1/3 • Чтение показателей состояния (HUAWEI Health / HealthKit)...';
+    if (progressBar) progressBar.style.width = '35%';
 
-    // 2. Очищаем любые дубликаты в расписании
-    state.schedule = deduplicateScheduleArray(state.schedule);
-
-    // 3. Если есть свободные окна и нераспределённые задачи — подбираем оптимальную задачу в фокус
-    const nowTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    state.health.lastSync = `Принудительное обновление • Сегодня в ${nowTime}`;
-    state.syncMeta.lastCalendarSync = `Обновлено в ${nowTime} • Энергобаланс пересчитан`;
+    const sleepVal = parseFloat(document.getElementById('sync-input-sleep')?.value) || 7.4;
+    const deepVal = parseFloat(document.getElementById('sync-input-deep')?.value) || 2.3;
+    const bedtimeVal = document.getElementById('sync-input-bedtime')?.value || '23:20';
+    const stepsVal = parseInt(document.getElementById('sync-input-steps')?.value, 10) || 6400;
+    const calVal = parseInt(document.getElementById('sync-input-calories')?.value, 10) || 480;
+    const hrVal = parseInt(document.getElementById('sync-input-hr')?.value, 10) || 55;
 
     setTimeout(() => {
-        if (pillText) pillText.textContent = `✓ ${nowTime}`;
-        renderAll();
-        if (showNotification) {
-            playTactileClick(true);
-            showToast(`Синхронизировано в ${nowTime}! Заряд: ${getBatteryScore()}%`, '🔄');
+        if (stepText) stepText.textContent = '2/3 • Подгрузка расписания Календаря и свободных окон...';
+        if (progressBar) progressBar.style.width = '70%';
+    }, 280);
+
+    setTimeout(() => {
+        if (stepText) stepText.textContent = '3/3 • Загрузка Банка задач (Категории А, Б, В)...';
+        if (progressBar) progressBar.style.width = '100%';
+    }, 560);
+
+    setTimeout(() => {
+        // Записываем синхронизированные данные состояния
+        state.isSynced = true;
+        state.health.sleepHours = sleepVal;
+        state.health.deepSleepHours = deepVal;
+        state.health.bedtime = bedtimeVal;
+        state.health.steps = stepsVal;
+        state.health.activeCalories = calVal;
+        state.health.restingHR = hrVal;
+
+        const nowTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        state.health.lastSync = `Синхронизировано в ${nowTime} (Часы + Календарь + Задачи)`;
+        state.health.lastSyncDate = new Date().toISOString().slice(0, 10);
+
+        // Если шаблон расписания пуст — подгружаем расписание дня
+        if (!state.schedule || state.schedule.length === 0) {
+            state.schedule = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_SCHEDULE));
         }
-    }, 260);
+
+        // Если шаблон задач пуст — подгружаем Банк задач
+        if (!state.tasks || state.tasks.length === 0) {
+            state.tasks = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_TASKS));
+        }
+
+        state.syncMeta.lastCalendarSync = `Синхронизировано сегодня в ${nowTime} • Активно слотов: ${state.schedule.length}`;
+
+        if (progressBox) progressBox.classList.add('hidden');
+        closeAllModals();
+        playTactileClick(true);
+        renderAll();
+        showToast(`Данные подгружены! Заряд: ${getBatteryScore()}%`, '✅');
+    }, 850);
 }
 
-// Вызов твоей быстрой команды «Планировщик» на iPhone (без ошибки RitmSync!)
-function runPlannerShortcut() {
-    const input = document.getElementById('shortcut-name-input');
-    const name = (input && input.value.trim()) ? input.value.trim() : (state.shortcutName || 'Планировщик');
-    state.shortcutName = name;
-    saveState();
-
-    showToast(`Запуск команды «${name}»...`, '📲');
-    const encodedName = encodeURIComponent(name);
-    window.location.href = `shortcuts://run-shortcut?name=${encodedName}`;
-}
-
+// Автоматическая синхронизация при переходе по ссылке из команды «Планировщик» (?sleep=...&steps=...)
 function parseUrlHealthTelemetry() {
     try {
         const params = new URLSearchParams(window.location.search);
@@ -304,36 +327,66 @@ function parseUrlHealthTelemetry() {
             if (!isNaN(val) && val > 30) { state.health.restingHR = val; updated = true; }
         }
 
-        if (params.has('cal')) {
-            const parsedEvents = parseCalendarStringPayload(params.get('cal'));
-            if (parsedEvents.length > 0) {
-                mergeExternalEventsIntoSchedule(parsedEvents, 'Календарь iOS');
-                updated = true;
-            }
+        if (params.has('autoSync')) {
+            updated = true;
         }
 
-        if (params.has('tasks')) {
-            const count = importExternalTasksList(params.get('tasks'), 'Напоминания');
-            if (count > 0) updated = true;
-        }
-
+        // Если пришли данные из URL — активируем синхронизированный режим и заполняем пустой шаблон!
         if (updated) {
+            state.isSynced = true;
+            if (state.health.sleepHours === null) state.health.sleepHours = 7.4;
+            if (state.health.deepSleepHours === null) state.health.deepSleepHours = 2.3;
+            if (state.health.bedtime === '--:--') state.health.bedtime = '23:20';
+            if (state.health.activeCalories === null) state.health.activeCalories = 480;
+            if (state.health.steps === null) state.health.steps = 6400;
+            if (state.health.restingHR === null) state.health.restingHR = 55;
+
+            if (!state.schedule || state.schedule.length === 0) {
+                state.schedule = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_SCHEDULE));
+            }
+            if (!state.tasks || state.tasks.length === 0) {
+                state.tasks = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_TASKS));
+            }
+
+            if (params.has('cal')) {
+                const parsedEvents = parseCalendarStringPayload(params.get('cal'));
+                if (parsedEvents.length > 0) {
+                    mergeExternalEventsIntoSchedule(parsedEvents, 'Календарь iOS');
+                }
+            }
+
+            if (params.has('tasks')) {
+                importExternalTasksList(params.get('tasks'), 'Напоминания');
+            }
+
             const timeStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-            state.health.lastSync = `Синхронизировано из «Планировщика» (${timeStr})`;
+            state.health.lastSync = `Синхронизировано из «Планировщика» в ${timeStr}`;
             state.health.lastSyncDate = new Date().toISOString().slice(0, 10);
+            state.syncMeta.lastCalendarSync = `Подгружено из команды «Планировщик» (${timeStr})`;
             window.history.replaceState({}, document.title, window.location.pathname);
             saveState();
+            setTimeout(() => showToast(`Синхронизировано! Заряд: ${getBatteryScore()}%`, '📲'), 200);
         }
     } catch (e) {
         console.warn('Ошибка чтения URL-параметров:', e);
     }
 }
 
+function runPlannerShortcut() {
+    const input = document.getElementById('shortcut-name-input');
+    const name = (input && input.value.trim()) ? input.value.trim() : (state.shortcutName || 'Планировщик');
+    state.shortcutName = name;
+    saveState();
+
+    showToast(`Запуск команды «${name}»...`, '⌚');
+    window.location.href = `shortcuts://run-shortcut?name=${encodeURIComponent(name)}`;
+}
+
 /* =========================================================
    4. МАТЕМАТИЧЕСКОЕ ЯДРО И ЦВЕТОВОЙ ГРАДИЕНТ (80-100, 50-79, <=49)
    ========================================================= */
 function parseBedtimePoints(bedtimeStr) {
-    if (!bedtimeStr || typeof bedtimeStr !== 'string') return 0;
+    if (!bedtimeStr || typeof bedtimeStr !== 'string' || bedtimeStr === '--:--') return 0;
     const [h, m] = bedtimeStr.split(':').map(Number);
     if (isNaN(h)) return 0;
     const dec = h + (m || 0) / 60;
@@ -351,7 +404,27 @@ function getSlotDurationHours(slot) {
 }
 
 function calculateEnergyBreakdown() {
-    const { sleepHours, deepSleepHours, bedtime, activeCalories, steps, restingHR } = state.health;
+    if (!state.isSynced) {
+        return {
+            total: 0,
+            baseHealthTotal: 0,
+            sleepPoints: 0,
+            deepPoints: 0,
+            bedtimePoints: 0,
+            loadPenalty: 0,
+            tasksNetDelta: 0,
+            moodAdjustment: 0,
+            manualOffset: 0,
+            overloadRisk: 0
+        };
+    }
+
+    const sleepHours = Number(state.health.sleepHours) || 0;
+    const deepSleepHours = Number(state.health.deepSleepHours) || 0;
+    const bedtime = state.health.bedtime;
+    const activeCalories = Number(state.health.activeCalories) || 0;
+    const steps = Number(state.health.steps) || 0;
+    const restingHR = Number(state.health.restingHR) || 58;
 
     const sleepRatio = Math.min(Math.max(sleepHours, 0) / 8.0, 1.0);
     const sleepPoints = Math.round(sleepRatio * 70);
@@ -380,7 +453,6 @@ function calculateEnergyBreakdown() {
         sleepPoints + deepPoints + bedtimePoints + loadPenalty + moodAdjustment + (state.manualOffset || 0)
     )));
 
-    // Динамический расход от выполненных слотов И выполненных задач в Банке задач
     let tasksNetDelta = 0;
     const countedTitles = new Set();
 
@@ -432,13 +504,20 @@ function getBatteryScore() {
     return calculateEnergyBreakdown().total;
 }
 
-/**
- * Точное распределение цветовых тем по требованию пользователя:
- *  - 80–100%: Светло-зелёный градиент от батареи (theme-high-green)
- *  - 50–79%:  Светло-жёлтый градиент от батареи (theme-mid-yellow)
- *  - <= 49%:  Красно-жёлтый градиент от батареи (theme-low-red-yellow)
- */
 function getEnergyVisualProfile(score) {
+    if (!state.isSynced) {
+        return {
+            level: 'uninitialized',
+            bodyClass: 'theme-uninitialized',
+            themeColorHex: '#070d14',
+            zoneCaption: 'Шаблон пуст • Нажмите «Синхронизировать» для загрузки данных',
+            mainTag: 'ПУСТОЙ ШАБЛОН',
+            subTag: 'ОЖИДАНИЕ СИНХРОНИЗАЦИИ',
+            badge: '⏳ Ожидание синхронизации',
+            liquidGradient: 'linear-gradient(180deg, #38bdf8 0%, #0284c7 100%)',
+            ringColor: '#38bdf8'
+        };
+    }
     if (score >= 80) {
         return {
             level: 'high',
@@ -479,10 +558,22 @@ function getEnergyVisualProfile(score) {
 }
 
 function applyTestBatteryLevel(targetScore) {
+    if (!state.isSynced) {
+        // Если ещё не синхронизировано — сначала подгружаем шаблон
+        state.isSynced = true;
+        state.health.sleepHours = 7.4;
+        state.health.deepSleepHours = 2.3;
+        state.health.bedtime = '23:20';
+        state.health.activeCalories = 480;
+        state.health.steps = 6400;
+        state.health.restingHR = 55;
+        if (!state.schedule.length) state.schedule = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_SCHEDULE));
+        if (!state.tasks.length) state.tasks = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_TASKS));
+    }
     const currentWithoutOffset = calculateEnergyBreakdown().total - (state.manualOffset || 0);
     state.manualOffset = targetScore - currentWithoutOffset;
     renderAll();
-    showToast(`Включён тест цветовой зоны: ${targetScore}%`, '🎨');
+    showToast(`Включён цветовой режим: ${targetScore}%`, '🎨');
 }
 
 function resetManualOffset() {
@@ -501,7 +592,6 @@ function toggleTaskCompleted(taskId, event) {
 
     task.done = !task.done;
 
-    // Также синхронизируем со слотом расписания, если задача стоит в расписании
     const matchingSlot = state.schedule.find(s => s.title.trim().toLowerCase() === task.title.trim().toLowerCase());
     if (matchingSlot) {
         matchingSlot.done = task.done;
@@ -523,13 +613,22 @@ function setTaskToFocusNow(taskId, event) {
     if (!task) return;
 
     task.done = false;
-    // Ставим задачу в текущий активный слот фокуса
     let focusSlot = state.schedule.find(s => !s.done && s.type !== 'routine') || state.schedule[1] || state.schedule[0];
     if (focusSlot) {
         focusSlot.title = task.title;
         focusSlot.type = task.complexity === 'rest' ? 'break' : 'focus';
         focusSlot.energy = task.complexity || 'high';
         focusSlot.done = false;
+    } else {
+        state.schedule.push({
+            id: 'slot-' + Date.now(),
+            start: '10:00',
+            end: '12:00',
+            title: task.title,
+            type: 'focus',
+            energy: task.complexity || 'high',
+            done: false
+        });
     }
 
     renderAll();
@@ -542,10 +641,13 @@ function scheduleTaskToToday(taskId, event) {
     const task = state.tasks.find(t => t.id === taskId);
     if (!task) return;
     fillNearestFreeWindow(task.title, task.complexity || 'medium');
-    showToast(`📅 Поставлено в план: ${task.title.slice(0, 30)}...`, '📅');
 }
 
 function openTaskPickerModal() {
+    if (!state.isSynced || state.tasks.length === 0) {
+        openLiveSyncModal();
+        return;
+    }
     const modal = document.getElementById('task-picker-modal');
     const list = document.getElementById('modal-task-picker-list');
     if (!modal || !list) return;
@@ -567,7 +669,7 @@ function openTaskPickerModal() {
 }
 
 /* =========================================================
-   6. ОТРИСОВКА ИНТЕРФЕЙСА (RENDER ALL)
+   6. ОТРИСОВКА ИНТЕРФЕЙСА (ПУСТОЙ ШАБЛОН VS СИНХРОНИЗИРОВАННЫЙ)
    ========================================================= */
 function renderAll() {
     renderHeaderDate();
@@ -596,6 +698,10 @@ function renderHeaderDate() {
     if (dayLabel) {
         dayLabel.textContent = state.dayType === 'work' ? 'Рабочий' : 'Выходной';
     }
+    const pillText = document.getElementById('sync-pill-text');
+    if (pillText) {
+        pillText.textContent = state.isSynced ? '✓ Синхр. (Обновить)' : '🔄 Синхронизировать';
+    }
 }
 
 function renderBatteryAndThemeAura() {
@@ -603,18 +709,23 @@ function renderBatteryAndThemeAura() {
     const score = breakdown.total;
     const profile = getEnergyVisualProfile(score);
 
-    // Переключаем класс градиента на body (80-100% светло-зеленый, 50-79% светло-желтый, <=49% красно-желтый)
-    document.body.classList.remove('theme-high-green', 'theme-mid-yellow', 'theme-low-red-yellow');
+    document.body.classList.remove('theme-uninitialized', 'theme-high-green', 'theme-mid-yellow', 'theme-low-red-yellow');
     document.body.classList.add(profile.bodyClass);
 
     const metaTheme = document.getElementById('meta-theme-color');
     if (metaTheme) metaTheme.setAttribute('content', profile.themeColorHex);
 
+    const banner = document.getElementById('empty-template-banner');
+    if (banner) banner.classList.toggle('hidden', state.isSynced);
+
+    const particlesBox = document.getElementById('energy-particles-box');
+    if (particlesBox) particlesBox.style.opacity = state.isSynced ? '1' : '0';
+
     const zoneCaption = document.getElementById('aura-zone-caption');
     if (zoneCaption) zoneCaption.textContent = profile.zoneCaption;
 
     const scoreEl = document.getElementById('sleep-score');
-    if (scoreEl) scoreEl.textContent = `${score}%`;
+    if (scoreEl) scoreEl.textContent = state.isSynced ? `${score}%` : '--%';
 
     const mainTagEl = document.getElementById('battery-state-tag');
     if (mainTagEl) mainTagEl.textContent = profile.mainTag;
@@ -624,26 +735,30 @@ function renderBatteryAndThemeAura() {
 
     const liquidFill = document.getElementById('battery-bar-fill');
     if (liquidFill) {
-        liquidFill.style.height = `${score}%`;
+        liquidFill.style.height = state.isSynced ? `${score}%` : '0%';
         liquidFill.style.background = profile.liquidGradient;
     }
 
     const ringProgress = document.getElementById('hud-ring-progress');
     if (ringProgress) {
         const circumference = 854;
-        const dash = Math.round((score / 100) * 680);
+        const dash = state.isSynced ? Math.round((score / 100) * 680) : 0;
         ringProgress.style.strokeDasharray = `${dash} ${circumference}`;
         ringProgress.style.stroke = profile.ringColor;
     }
 
-    const currentSlot = state.schedule.find(s => !s.done) || state.schedule[0];
-    const currentRate = currentSlot ? (TASK_ENERGY_RATES[currentSlot.energy] ?? -2.0) : -1.2;
     const drainBadge = document.getElementById('drain-rate-badge');
     if (drainBadge) {
-        const sign = currentRate > 0 ? '+' : '';
-        drainBadge.textContent = currentRate > 0
-            ? `🔋 Восстановление: ${sign}${currentRate}% / ч`
-            : `⚡ Расход: ${currentRate}% / ч`;
+        if (!state.isSynced) {
+            drainBadge.textContent = '⏳ Ожидание синхронизации...';
+        } else {
+            const currentSlot = state.schedule.find(s => !s.done) || state.schedule[0];
+            const currentRate = currentSlot ? (TASK_ENERGY_RATES[currentSlot.energy] ?? -2.0) : -1.2;
+            const sign = currentRate > 0 ? '+' : '';
+            drainBadge.textContent = currentRate > 0
+                ? `🔋 Восстановление: ${sign}${currentRate}% / ч`
+                : `⚡ Расход: ${currentRate}% / ч`;
+        }
     }
 
     const offsetEl = document.getElementById('manual-offset');
@@ -654,9 +769,49 @@ function renderBatteryAndThemeAura() {
     }
 }
 
+function renderBentoGrid() {
+    const sleepEl = document.getElementById('metric-sleep-hours');
+    if (sleepEl) {
+        sleepEl.innerHTML = state.isSynced && state.health.sleepHours !== null
+            ? `${Number(state.health.sleepHours).toFixed(1)} <small>ч</small>`
+            : `-- <small>ч</small>`;
+    }
+
+    const deepEl = document.getElementById('metric-deep-sleep');
+    if (deepEl) {
+        deepEl.textContent = state.isSynced && state.health.deepSleepHours !== null
+            ? Number(state.health.deepSleepHours).toFixed(1)
+            : '--';
+    }
+
+    const calEl = document.getElementById('metric-calories');
+    if (calEl) {
+        calEl.textContent = state.isSynced && state.health.activeCalories !== null
+            ? state.health.activeCalories
+            : '--';
+    }
+
+    const stepsEl = document.getElementById('steps-count');
+    if (stepsEl) {
+        stepsEl.textContent = state.isSynced && state.health.steps !== null
+            ? Number(state.health.steps).toLocaleString('ru-RU')
+            : '--';
+    }
+}
+
 function renderHomeQuickTasks() {
     const container = document.getElementById('home-quick-tasks');
     if (!container) return;
+
+    if (!state.isSynced || state.tasks.length === 0) {
+        container.innerHTML = `
+            <li class="empty-state-placeholder">
+                <p>Список задач пока пуст. Подгрузите задачи и расписание через синхронизацию или добавьте вручную.</p>
+                <button class="btn-primary-neon" onclick="openLiveSyncModal()">🔄 Подгрузить задачи и состояние</button>
+            </li>
+        `;
+        return;
+    }
 
     const topTasks = state.tasks.slice(0, 4);
     container.innerHTML = topTasks.map(task => renderInteractiveTaskItemHtml(task)).join('');
@@ -702,6 +857,21 @@ function renderMainRecommendationCard() {
 
     const prefixEl = document.getElementById('rec-lead-prefix');
     const bodyEl = document.getElementById('rec-lead-body');
+    const marker = document.getElementById('overload-marker');
+    const riskText = document.getElementById('overload-status-text');
+    const grid = document.getElementById('recommendations-grid');
+
+    if (!state.isSynced) {
+        if (prefixEl) prefixEl.textContent = '⏳ ШАБЛОН ОЖИДАЕТ СИНХРОНИЗАЦИИ:';
+        if (bodyEl) bodyEl.textContent = 'После подгрузки данных с часов и календаря ИИ-координатор рассчитает ваш заряд и сформирует 4 персональные рекомендации.';
+        if (marker) marker.style.left = '0%';
+        if (riskText) {
+            riskText.textContent = '--% (Ожидание данных)';
+            riskText.className = 'risk-low';
+        }
+        if (grid) grid.innerHTML = '';
+        return;
+    }
 
     if (prefixEl && bodyEl) {
         if (state.dayType === 'work') {
@@ -726,10 +896,8 @@ function renderMainRecommendationCard() {
         }
     }
 
-    const marker = document.getElementById('overload-marker');
     if (marker) marker.style.left = `${risk}%`;
 
-    const riskText = document.getElementById('overload-status-text');
     if (riskText) {
         let riskLabel = 'Низкий';
         riskText.className = 'risk-low';
@@ -752,7 +920,6 @@ function renderMainRecommendationCard() {
         btn.classList.toggle('active', btn.dataset.mood === state.morningMood);
     });
 
-    const grid = document.getElementById('recommendations-grid');
     if (grid) {
         grid.style.display = state.showDetailedRecs ? 'grid' : 'none';
         const recs = generateFourRecommendations();
@@ -801,26 +968,20 @@ function generateFourRecommendations() {
     ];
 }
 
-function renderBentoGrid() {
-    const sleepEl = document.getElementById('metric-sleep-hours');
-    if (sleepEl) sleepEl.innerHTML = `${Number(state.health.sleepHours).toFixed(1)} <small>ч</small>`;
-
-    const deepEl = document.getElementById('metric-deep-sleep');
-    if (deepEl) deepEl.textContent = Number(state.health.deepSleepHours).toFixed(1);
-
-    const calEl = document.getElementById('metric-calories');
-    if (calEl) calEl.textContent = state.health.activeCalories;
-
-    const stepsEl = document.getElementById('steps-count');
-    if (stepsEl) stepsEl.textContent = Number(state.health.steps).toLocaleString('ru-RU');
-
-    const goalEl = document.getElementById('steps-goal');
-    if (goalEl) goalEl.textContent = `/ ${Number(state.health.stepsGoal || 10000).toLocaleString('ru-RU')}`;
-}
-
 function renderFocusAndCoordinator() {
     const score = getBatteryScore();
     const profile = getEnergyVisualProfile(score);
+
+    if (!state.isSynced || state.schedule.length === 0) {
+        document.getElementById('focus-time').textContent = '--:-- — --:--';
+        document.getElementById('focus-title').textContent = 'Шаблон пуст — нажмите «Синхронизировать»';
+        document.getElementById('focus-desc').textContent = 'После синхронизации здесь появится текущая приоритетная задача и расчёт её влияния на батарею.';
+        document.getElementById('focus-cost-label').textContent = '--%';
+        document.getElementById('evening-forecast-label').textContent = '--%';
+        document.getElementById('coordinator-energy-tag').textContent = '⏳ Шаблон';
+        document.getElementById('assistant-text').textContent = 'Выполните синхронизацию, чтобы загрузить свободные окна календаря.';
+        return;
+    }
 
     const currentSlot = state.schedule.find(s => !s.done && s.type !== 'free')
         || state.schedule.find(s => !s.done)
@@ -833,6 +994,7 @@ function renderFocusAndCoordinator() {
 
         document.getElementById('focus-time').textContent = `${currentSlot.start} — ${currentSlot.end}`;
         document.getElementById('focus-title').textContent = currentSlot.title;
+        document.getElementById('focus-desc').textContent = `Расход энергии слота: ${rate}%/ч • Нажми «✓ Выполнено» при завершении.`;
 
         const costLabel = document.getElementById('focus-cost-label');
         if (costLabel) {
@@ -857,7 +1019,7 @@ function renderFocusAndCoordinator() {
     const coordText = document.getElementById('assistant-text');
     if (coordText) {
         if (freeSlot) {
-            coordText.innerHTML = `Свободно окно <strong>${freeSlot.start} — ${freeSlot.end}</strong>. Заряд <strong>${score}%</strong> — нажми на кнопку ниже, чтобы занять окно:`;
+            coordText.innerHTML = `Свободно окно <strong>${freeSlot.start} — ${freeSlot.end}</strong>. Заряд <strong>${score}%</strong> — выбери задачу ниже:`;
         } else {
             coordText.textContent = `Все свободные окна на сегодня распределены! Текущий заряд: ${score}%.`;
         }
@@ -867,6 +1029,23 @@ function renderFocusAndCoordinator() {
 function renderTimeline() {
     const container = document.getElementById('timeline-list');
     if (!container) return;
+
+    const calSyncText = document.getElementById('calendar-sync-status-text');
+    if (calSyncText) {
+        calSyncText.textContent = state.syncMeta?.lastCalendarSync || 'Ожидание синхронизации';
+    }
+
+    if (!state.isSynced || state.schedule.length === 0) {
+        const drainSummary = document.getElementById('timeline-drain-summary');
+        if (drainSummary) drainSummary.textContent = 'Шаблон пуст';
+        container.innerHTML = `
+            <div class="empty-state-placeholder">
+                <p>В шаблоне календаря пока нет событий. Нажмите кнопку синхронизации, чтобы подгрузить слоты дня и свободные окна.</p>
+                <button class="btn-primary-neon" onclick="openLiveSyncModal()">🔄 Синхронизировать Календарь</button>
+            </div>
+        `;
+        return;
+    }
 
     const b = calculateEnergyBreakdown();
     const drainSummary = document.getElementById('timeline-drain-summary');
@@ -908,9 +1087,7 @@ function renderTimeline() {
                     <span class="slot-badge ${badgeClass}">${badgeText}</span>
                 </div>
                 <div class="slot-controls" onclick="event.stopPropagation()">
-                    <button class="slot-btn ${slot.done ? 'btn-slot-done-active' : ''}" onclick="toggleSlotDone('${slot.id}')" title="Отметить выполненным">
-                        ${slot.done ? '✓' : '✓'}
-                    </button>
+                    <button class="slot-btn ${slot.done ? 'btn-slot-done-active' : ''}" onclick="toggleSlotDone('${slot.id}')" title="Отметить выполненным">✓</button>
                     <button class="slot-btn" onclick="clearOrRemoveSlot('${slot.id}')" title="Освободить / Удалить">✕</button>
                 </div>
             </div>
@@ -923,17 +1100,25 @@ function renderTasksAndHoldPoints() {
     const badge = document.getElementById('tasks-count-badge');
     if (badge) badge.textContent = `${activeCount} активных`;
 
-    const filtered = state.tasks.filter(t => {
-        if (state.activeTaskFilter === 'all') return true;
-        if (state.activeTaskFilter === 'DONE') return t.done === true;
-        return t.category === state.activeTaskFilter;
-    });
-
     const list = document.getElementById('tomorrow-list');
     if (list) {
-        list.innerHTML = filtered.length
-            ? filtered.map(task => renderInteractiveTaskItemHtml(task)).join('')
-            : '<li class="task-card-item"><span>В этой категории пока нет задач ✨</span></li>';
+        if (!state.isSynced && state.tasks.length === 0) {
+            list.innerHTML = `
+                <li class="empty-state-placeholder">
+                    <p>Банк задач пуст (режим чистого шаблона). Нажмите «Синхронизировать», чтобы подгрузить задачи, или добавьте новую задачу выше.</p>
+                    <button class="btn-primary-neon" onclick="openLiveSyncModal()">🔄 Подгрузить список задач</button>
+                </li>
+            `;
+        } else {
+            const filtered = state.tasks.filter(t => {
+                if (state.activeTaskFilter === 'all') return true;
+                if (state.activeTaskFilter === 'DONE') return t.done === true;
+                return t.category === state.activeTaskFilter;
+            });
+            list.innerHTML = filtered.length
+                ? filtered.map(task => renderInteractiveTaskItemHtml(task)).join('')
+                : '<li class="task-card-item"><span>В этой категории пока нет задач ✨</span></li>';
+        }
     }
 
     const hpList = document.getElementById('hold-points-list');
@@ -949,43 +1134,69 @@ function renderTasksAndHoldPoints() {
 
 function renderHealthPageBreakdown() {
     const b = calculateEnergyBreakdown();
-
-    syncSlider('slider-sleep', 'val-sleep-hours', state.health.sleepHours, v => `${Number(v).toFixed(1)} ч`);
-    syncSlider('slider-deep', 'val-deep-sleep', state.health.deepSleepHours, v => `${Number(v).toFixed(1)} ч`);
-    syncSlider('slider-calories', 'val-calories', state.health.activeCalories, v => `${v} ккал`);
-    syncSlider('slider-steps', 'val-steps', state.health.steps, v => `${Number(v).toLocaleString('ru-RU')} шагов`);
-    syncSlider('slider-hr', 'val-hr', state.health.restingHR, v => `${v} уд/мин`);
-
-    const bedInput = document.getElementById('input-bedtime');
-    if (bedInput && bedInput.value !== state.health.bedtime) bedInput.value = state.health.bedtime;
+    const statusBadge = document.getElementById('healthkit-sync-status');
+    if (statusBadge) statusBadge.textContent = state.isSynced ? 'Синхронизировано ✓' : 'Пустой шаблон';
 
     const syncLabel = document.getElementById('last-sync-label');
     if (syncLabel) syncLabel.textContent = state.health.lastSync;
 
-    const formulaBox = document.getElementById('formula-breakdown');
-    if (formulaBox) {
-        formulaBox.innerHTML = `
-            <div class="formula-line"><span>🌙 База общего сна (${state.health.sleepHours} ч из 8.0 ч):</span><strong>+${b.sleepPoints}%</strong></div>
-            <div class="formula-line"><span>🟣 Бонус глубокого сна (${state.health.deepSleepHours} ч из 3.0 ч):</span><strong>+${b.deepPoints}%</strong></div>
-            <div class="formula-line"><span>🕘 Режим отхода ко сну (${state.health.bedtime}):</span><strong>${b.bedtimePoints >= 0 ? '+' : ''}${b.bedtimePoints}%</strong></div>
-            <div class="formula-line"><span>🔥 Физическая нагрузка (${state.health.activeCalories} ккал, ${state.health.steps} шагов):</span><strong>${b.loadPenalty}%</strong></div>
-            <div class="formula-line"><span>🎛 Настрой и ручная коррекция:</span><strong>${b.moodAdjustment + b.manualOffset >= 0 ? '+' : ''}${b.moodAdjustment + b.manualOffset}%</strong></div>
-            <div class="formula-line" style="border-top:1px dashed rgba(255,255,255,0.2); padding-top:6px;">
-                <span>❤️ База HealthKit:</span>
-                <strong>${b.baseHealthTotal}%</strong>
-            </div>
-            <div class="formula-line"><span>✅ Вычет / заряд выполненных задач:</span><strong>${b.tasksNetDelta >= 0 ? '+' : ''}${b.tasksNetDelta}%</strong></div>
-            <div class="formula-line" style="border-top:1px solid rgba(255,255,255,0.25); padding-top:8px; margin-top:4px;">
-                <span>🔋 Итоговый заряд батареи:</span>
-                <strong style="color:var(--aura-bright); font-size:1.05rem;">${b.total}% (Риск: ${b.overloadRisk}%)</strong>
-            </div>
-        `;
+    if (!state.isSynced) {
+        document.getElementById('val-sleep-hours').textContent = '-- ч';
+        document.getElementById('val-deep-sleep').textContent = '-- ч';
+        document.getElementById('val-calories').textContent = '-- ккал';
+        document.getElementById('val-steps').textContent = '-- шагов';
+        document.getElementById('val-hr').textContent = '-- уд/мин';
+
+        const formulaBox = document.getElementById('formula-breakdown');
+        if (formulaBox) {
+            formulaBox.innerHTML = `
+                <div class="empty-state-placeholder">
+                    <p>Данные здоровья ещё не синхронизированы. Нажмите кнопку ниже, чтобы загрузить показатели с часов или HealthKit.</p>
+                    <button class="btn-primary-neon" onclick="openLiveSyncModal()">🔄 Синхронизировать Здоровье</button>
+                </div>
+            `;
+        }
+    } else {
+        syncSlider('slider-sleep', 'val-sleep-hours', state.health.sleepHours, v => `${Number(v).toFixed(1)} ч`);
+        syncSlider('slider-deep', 'val-deep-sleep', state.health.deepSleepHours, v => `${Number(v).toFixed(1)} ч`);
+        syncSlider('slider-calories', 'val-calories', state.health.activeCalories, v => `${v} ккал`);
+        syncSlider('slider-steps', 'val-steps', state.health.steps, v => `${Number(v).toLocaleString('ru-RU')} шагов`);
+        syncSlider('slider-hr', 'val-hr', state.health.restingHR, v => `${v} уд/мин`);
+
+        const bedInput = document.getElementById('input-bedtime');
+        if (bedInput && bedInput.value !== state.health.bedtime) bedInput.value = state.health.bedtime;
+
+        const formulaBox = document.getElementById('formula-breakdown');
+        if (formulaBox) {
+            formulaBox.innerHTML = `
+                <div class="formula-line"><span>🌙 База общего сна (${state.health.sleepHours} ч из 8.0 ч):</span><strong>+${b.sleepPoints}%</strong></div>
+                <div class="formula-line"><span>🟣 Бонус глубокого сна (${state.health.deepSleepHours} ч из 3.0 ч):</span><strong>+${b.deepPoints}%</strong></div>
+                <div class="formula-line"><span>🕘 Режим отхода ко сну (${state.health.bedtime}):</span><strong>${b.bedtimePoints >= 0 ? '+' : ''}${b.bedtimePoints}%</strong></div>
+                <div class="formula-line"><span>🔥 Физическая нагрузка (${state.health.activeCalories} ккал, ${state.health.steps} шагов):</span><strong>${b.loadPenalty}%</strong></div>
+                <div class="formula-line"><span>🎛 Настрой и ручная коррекция:</span><strong>${b.moodAdjustment + b.manualOffset >= 0 ? '+' : ''}${b.moodAdjustment + b.manualOffset}%</strong></div>
+                <div class="formula-line" style="border-top:1px dashed rgba(255,255,255,0.2); padding-top:6px;">
+                    <span>❤️ База HealthKit:</span>
+                    <strong>${b.baseHealthTotal}%</strong>
+                </div>
+                <div class="formula-line"><span>✅ Вычет / заряд выполненных задач:</span><strong>${b.tasksNetDelta >= 0 ? '+' : ''}${b.tasksNetDelta}%</strong></div>
+                <div class="formula-line" style="border-top:1px solid rgba(255,255,255,0.25); padding-top:8px; margin-top:4px;">
+                    <span>🔋 Итоговый заряд батареи:</span>
+                    <strong style="color:var(--aura-bright); font-size:1.05rem;">${b.total}% (Риск: ${b.overloadRisk}%)</strong>
+                </div>
+            `;
+        }
     }
 
     const base = window.location.origin + window.location.pathname;
     const urlBox = document.getElementById('healthkit-shortcut-url');
     if (urlBox) {
-        urlBox.textContent = `${base}?sleep=${state.health.sleepHours}&deep=${state.health.deepSleepHours}&bedtime=${state.health.bedtime}&calories=${state.health.activeCalories}&steps=${state.health.steps}&hr=${state.health.restingHR}&autoSync=1`;
+        const sl = state.health.sleepHours ?? 7.4;
+        const dp = state.health.deepSleepHours ?? 2.3;
+        const bt = state.health.bedtime !== '--:--' ? state.health.bedtime : '23:20';
+        const cal = state.health.activeCalories ?? 480;
+        const st = state.health.steps ?? 6400;
+        const hr = state.health.restingHR ?? 55;
+        urlBox.textContent = `${base}?sleep=${sl}&deep=${dp}&bedtime=${bt}&calories=${cal}&steps=${st}&hr=${hr}&autoSync=1`;
     }
 }
 
@@ -1017,6 +1228,18 @@ function fillNearestFreeWindow(title, energy = 'medium', slotId = null) {
     if (!title || !title.trim()) return;
     const cleanTitle = title.trim();
 
+    if (!state.isSynced) {
+        state.isSynced = true;
+        if (state.health.sleepHours === null) {
+            state.health.sleepHours = 7.4;
+            state.health.deepSleepHours = 2.3;
+            state.health.bedtime = '23:20';
+            state.health.activeCalories = 480;
+            state.health.steps = 6400;
+            state.health.restingHR = 55;
+        }
+    }
+
     let slot = slotId
         ? state.schedule.find(s => s.id === slotId)
         : state.schedule.find(s => s.type === 'free' && !s.done);
@@ -1032,7 +1255,7 @@ function fillNearestFreeWindow(title, energy = 'medium', slotId = null) {
         slot.done = false;
     } else {
         const sorted = [...state.schedule].sort((a, b) => timeToMinutes(a.end) - timeToMinutes(b.end));
-        const lastEndMin = sorted.length ? timeToMinutes(sorted[sorted.length - 1].end) : 18 * 60;
+        const lastEndMin = sorted.length ? timeToMinutes(sorted[sorted.length - 1].end) : 10 * 60;
         const newStartMin = Math.min(21 * 60, Math.max(9 * 60, lastEndMin));
         const newEndMin = Math.min(22 * 60 + 30, newStartMin + 60);
 
@@ -1087,10 +1310,13 @@ function clearOrRemoveSlot(slotId) {
 }
 
 function completeCurrentFocus() {
+    if (!state.isSynced || state.schedule.length === 0) {
+        openLiveSyncModal();
+        return;
+    }
     const current = state.schedule.find(s => !s.done && s.type !== 'free') || state.schedule.find(s => !s.done);
     if (current) {
         current.done = true;
-        // Если задача есть в Банке задач — тоже отмечаем выполненной
         const matchTask = state.tasks.find(t => t.title.trim().toLowerCase() === current.title.trim().toLowerCase());
         if (matchTask) matchTask.done = true;
 
@@ -1140,6 +1366,10 @@ function removeTask(taskId, event) {
 }
 
 function moveTomorrowToToday() {
+    if (!state.isSynced) {
+        openLiveSyncModal();
+        return;
+    }
     const score = getBatteryScore();
     const activeTasks = state.tasks.filter(t => !t.done);
     const sorted = [...activeTasks].sort((a, b) => {
@@ -1210,14 +1440,29 @@ function setMorningMood(mood) {
 }
 
 function changeSleepScore(delta) {
+    if (!state.isSynced) {
+        openLiveSyncModal();
+        return;
+    }
     state.manualOffset = Math.max(-45, Math.min(45, (state.manualOffset || 0) + Number(delta)));
     renderAll();
     showToast(`Заряд батареи: ${getBatteryScore()}%`, '🔋');
 }
 
 function updateHealthMetric(key, val) {
+    state.isSynced = true;
+    if (state.health.sleepHours === null) {
+        state.health.sleepHours = 7.4;
+        state.health.deepSleepHours = 2.3;
+        state.health.bedtime = '23:20';
+        state.health.activeCalories = 480;
+        state.health.steps = 6400;
+        state.health.restingHR = 55;
+    }
     state.health[key] = key === 'bedtime' ? val : Number(val);
     state.health.lastSync = 'Откалибровано вручную • только что';
+    if (!state.schedule.length) state.schedule = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_SCHEDULE));
+    if (!state.tasks.length) state.tasks = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_TASKS));
     renderAll();
 }
 
@@ -1237,6 +1482,10 @@ function toggleDetailedRecs() {
 }
 
 function activateLowEnergyMode() {
+    if (!state.isSynced) {
+        openLiveSyncModal();
+        return;
+    }
     state.morningMood = 'low';
     state.schedule.forEach(slot => {
         if (!slot.done && slot.energy === 'high') {
@@ -1249,11 +1498,19 @@ function activateLowEnergyMode() {
 }
 
 function autoFillScheduleByEnergy() {
+    if (!state.isSynced) {
+        openLiveSyncModal();
+        return;
+    }
     moveTomorrowToToday();
     switchPage('calendar');
 }
 
 function protectMorningBlock() {
+    if (!state.isSynced) {
+        openLiveSyncModal();
+        return;
+    }
     const morning = state.schedule.find(s => s.start.startsWith('09') || s.start.startsWith('10')) || state.schedule[0];
     if (morning) {
         morning.title = '🛡️ Защищённый блок Кат. А: Главная задача без телефона';
@@ -1281,6 +1538,7 @@ function parseCalendarStringPayload(rawStr) {
 
 function mergeExternalEventsIntoSchedule(externalEvents, sourceLabel = 'Календарь') {
     if (!Array.isArray(externalEvents) || !externalEvents.length) return;
+    state.isSynced = true;
     externalEvents.forEach((ev, idx) => {
         const cls = classifyEnergyByText(ev.title);
         state.schedule.push({
@@ -1355,21 +1613,8 @@ function importQuickPastedEvents() {
     }
 }
 
-function openSyncHubModal() {
-    const input = document.getElementById('shortcut-name-input');
-    if (input) input.value = state.shortcutName || 'Планировщик';
-    document.getElementById('sync-hub-modal')?.classList.remove('hidden');
-}
-
 function openAddSlotModal() {
     document.getElementById('add-slot-modal')?.classList.remove('hidden');
-}
-
-function openStepsModal() {
-    const modal = document.getElementById('steps-modal');
-    const input = document.getElementById('steps-input');
-    if (input) input.value = state.health.steps;
-    if (modal) modal.classList.remove('hidden');
 }
 
 function closeAllModals() {
@@ -1382,6 +1627,7 @@ function saveNewSlot() {
     const title = document.getElementById('new-slot-title')?.value.trim() || 'Свободное окно';
     const energy = document.getElementById('new-slot-energy')?.value || 'medium';
 
+    state.isSynced = true;
     state.schedule.push({
         id: 'slot-' + Date.now(),
         start,
@@ -1395,17 +1641,6 @@ function saveNewSlot() {
     closeAllModals();
     renderAll();
     showToast('Новый слот добавлен в план', '📅');
-}
-
-function saveStepsManual() {
-    const val = parseInt(document.getElementById('steps-input')?.value, 10);
-    if (!isNaN(val) && val >= 0) {
-        state.health.steps = val;
-        state.health.lastSync = 'Шаги обновлены • только что';
-        showToast(`Шаги обновлены: ${val}`, '👟');
-    }
-    closeAllModals();
-    renderAll();
 }
 
 function copyShortcutUrl() {
@@ -1461,18 +1696,16 @@ function escapeHtml(str) {
 }
 
 /* =========================================================
-   8. АВТОЗАПУСК И АВТОСИНХРОНИЗАЦИЯ ПРИ ОТКРЫТИИ
+   8. ИНИЦИАЛИЗАЦИЯ ПРИ ОТКРЫТИИ ПРИЛОЖЕНИЯ
    ========================================================= */
 document.addEventListener('DOMContentLoaded', () => {
     attachGlobalButtonRipple();
     parseUrlHealthTelemetry();
-    checkMorningAutoSync();
     renderAll();
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             parseUrlHealthTelemetry();
-            checkMorningAutoSync();
             renderAll();
         }
     });
