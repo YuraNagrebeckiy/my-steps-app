@@ -2,22 +2,22 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>Ритм Дня v4.2 — Личный Ресурс • Юрий Нагребецкий</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-[span_4](start_span)[span_4](end_span)[span_6](start_span)[span_6](end_span)[span_8](start_span)[span_8](end_span)fit=cover" />
+    <title>Ритм Дня v4.3 — Личный Ресурс • Юрий Нагребецкий</title>
 
     <!-- Настройки PWA для iPhone 16 Pro Max (iOS 27.0.1) -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Ритм Дня" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="theme-color" content="#061510" id="meta-theme-color" />
+    <meta name="theme-color" content="#070d14" id="meta-theme-color" />
 
     <link rel="manifest" href="manifest.json" />
     <link rel="apple-touch-icon" href="icon-192.png" />
     <link rel="stylesheet" href="style.css" />
 </head>
-<body class="theme-high-green">
-    <!-- Фоновое динамическое свечение от батареи (меняет цвет: 80-100% светло-зелёный, 50-79% светло-жёлтый, <=49% красно-жёлтый) -->
+<body class="theme-uninitialized">
+    <!-- Фоновое динамическое свечение от батареи -->
     <div class="ambient-bg" id="ambient-bg">
         <div class="battery-aura-cone" id="battery-aura-cone"></div>
         <div class="ambient-orb orb-primary"></div>
@@ -40,9 +40,9 @@
                     <span class="user-subtitle">ЮРИЙ НАГРЕБЕЦКИЙ • ЛИЧНЫЙ РЕСУРС</span>
                     <div class="title-row">
                         <h1 class="main-title">РИТМ ДНЯ</h1>
-                        <button class="sync-live-pill" id="force-sync-btn" onclick="forceFullSync(true)" title="Принудительное обновление данных">
+                        <button class="sync-live-pill" id="force-sync-btn" onclick="openLiveSyncModal()" title="Синхронизировать данные с часов, Календаря и Задач">
                             <span class="sync-dot" id="sync-dot-indicator"></span>
-                            <span id="sync-pill-text">🔄 Обновить</span>
+                            <span id="sync-pill-text">🔄 Синхронизировать</span>
                         </button>
                     </div>
                     <span class="date-subtitle" id="current-date">ЧЕТВЕРГ, 22 ОКТЯБРЯ</span>
@@ -52,8 +52,8 @@
                     <button class="hud-icon-btn" id="day-type-toggle" onclick="toggleDayType()" title="Переключить Рабочий / Выходной">
                         🛠 <span id="day-type-label">Рабочий</span>
                     </button>
-                    <button class="hud-icon-btn" onclick="openSyncHubModal()" title="Настройки синхронизации и Инструкция">
-                        📲 <span>Инструкция</span>
+                    <button class="hud-icon-btn" onclick="resetToEmptyTemplate()" title="Очистить и вернуть в пустой шаблон">
+                        🧹 <span>В шаблон</span>
                     </button>
                 </div>
             </div>
@@ -64,7 +64,6 @@
 
             <!-- ЦЕНТРАЛЬНЫЙ 3D-ГОЛОГРАФИЧЕСКИЙ МОДУЛЬ БАТАРЕИ (HUD) -->
             <section class="battery-hud-showcase" id="battery-showcase">
-                <!-- Радиальное свечение непосредственно вокруг батареи -->
                 <div class="battery-radial-backlight" id="battery-radial-backlight"></div>
 
                 <!-- 4 угловых мини-осциллографа телеметрии -->
@@ -75,7 +74,7 @@
                     <svg viewBox="0 0 100 36" class="hud-mini-wave">
                         <path d="M0,24 L15,24 L22,10 L28,30 L35,6 L42,28 L50,18 L65,18 L72,8 L80,26 L90,20 L100,20" />
                     </svg>
-                    <span class="hud-micro-label">HRV BOOST</span>
+                    <span class="hud-micro-label">HUAWEI / HEALTH</span>
                 </div>
                 <div class="hud-corner hud-bl">
                     <svg viewBox="0 0 100 36" class="hud-mini-wave wave-cyan">
@@ -89,7 +88,7 @@
                 </div>
 
                 <!-- Орбитальные вращающиеся кольца и 3D-цилиндр -->
-                <div class="orbital-stage" onclick="switchPage('health')">
+                <div class="orbital-stage" onclick="openLiveSyncModal()">
                     <svg class="orbital-svg ring-outer-ticks" viewBox="0 0 320 320">
                         <circle cx="160" cy="160" r="148" class="ticks-circle" />
                         <circle cx="160" cy="160" r="136" class="arc-glow-outer" id="hud-ring-progress" />
@@ -98,9 +97,9 @@
                     <svg class="orbital-svg ring-rotating-ccw" viewBox="0 0 320 320">
                         <defs>
                             <linearGradient id="neonRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" stop-color="var(--aura-bright)" id="grad-stop-1" />
-                                <stop offset="50%" stop-color="var(--aura-mid)" id="grad-stop-2" />
-                                <stop offset="100%" stop-color="var(--aura-soft)" stop-opacity="0.2" id="grad-stop-3" />
+                                <stop offset="0%" stop-color="var(--aura-bright)" />
+                                <stop offset="50%" stop-color="var(--aura-mid)" />
+                                <stop offset="100%" stop-color="var(--aura-soft)" stop-opacity="0.2" />
                             </linearGradient>
                         </defs>
                         <circle cx="160" cy="160" r="122" stroke="url(#neonRingGrad)" stroke-width="6" fill="none" stroke-dasharray="190 95 110 80" stroke-linecap="round" />
@@ -114,7 +113,7 @@
                     <div class="orbital-node node-bottom-left" title="Циркадный ритм">🍏</div>
                     <div class="orbital-node node-bottom-right" title="Активные калории">🔥</div>
 
-                    <!-- 3D СТЕКЛЯННЫЙ ЦИЛИНДР БАТАРЕИ -->
+                    <!-- 3D СТЕКЛЯННЫЙ ЦИЛИНДР БАТАРЕИ (ПРИ ПЕРВОМ ЗАПУСКЕ ПУСТОЙ — 0%) -->
                     <div class="battery-3d-wrapper" id="battery-3d-wrapper">
                         <div class="battery-cap-top">
                             <div class="battery-terminal-nub"></div>
@@ -122,7 +121,7 @@
                         </div>
 
                         <div class="battery-glass-body" id="battery-glass-body">
-                            <div class="energy-particles">
+                            <div class="energy-particles" id="energy-particles-box" style="opacity: 0;">
                                 <span class="particle p1"></span>
                                 <span class="particle p2"></span>
                                 <span class="particle p3"></span>
@@ -131,15 +130,16 @@
                                 <span class="particle p6"></span>
                             </div>
 
-                            <div class="battery-liquid-fill" id="battery-bar-fill" style="height: 92%;">
+                            <!-- Жидкостное заполнение (при старте 0% — пустой шаблон) -->
+                            <div class="battery-liquid-fill" id="battery-bar-fill" style="height: 0%;">
                                 <div class="liquid-top-meniscus" id="liquid-top-meniscus"></div>
                                 <div class="liquid-wave-layer"></div>
                             </div>
 
                             <div class="battery-core-overlay">
-                                <div class="battery-percentage" id="sleep-score">92%</div>
-                                <div class="battery-status-main" id="battery-state-tag">ПОЛНЫЙ СИЛ</div>
-                                <div class="battery-status-sub" id="battery-sub-tag">ОПТИМАЛЬНЫЙ РЕСУРС</div>
+                                <div class="battery-percentage" id="sleep-score">--%</div>
+                                <div class="battery-status-main" id="battery-state-tag">ПУСТОЙ ШАБЛОН</div>
+                                <div class="battery-status-sub" id="battery-sub-tag">НАЖМИТЕ СИНХРОНИЗАЦИЯ</div>
 
                                 <div class="battery-ecg-row">
                                     <svg viewBox="0 0 160 40" class="battery-internal-ecg">
@@ -157,12 +157,12 @@
                     </div>
                 </div>
 
-                <!-- Подпись под орбитальной шкалой + быстрая калибровка заряда -->
+                <!-- Подпись под орбитальной шкалой -->
                 <div class="hud-caption-curve">
-                    <span id="aura-zone-caption">Зона 80–100%: Светло-зелёный поток энергии</span>
+                    <span id="aura-zone-caption">Шаблон не синхронизирован • Нажмите кнопку синхронизации</span>
                 </div>
                 <div class="live-drain-ticker" id="live-drain-indicator">
-                    <span class="drain-rate-badge" id="drain-rate-badge">⚡ Расход задачи: −2.8% / ч</span>
+                    <span class="drain-rate-badge" id="drain-rate-badge">⏳ Ожидание данных с часов...</span>
                     <div class="quick-offset-Btns">
                         <button class="micro-adj-btn" onclick="changeSleepScore(-10)" title="Уменьшить заряд на 10%">−10%</button>
                         <button class="micro-adj-btn" onclick="changeSleepScore(-5)" title="Уменьшить заряд на 5%">−</button>
@@ -173,21 +173,87 @@
                 </div>
             </section>
 
-            <!-- СЕЙЧАС В ФОКУСЕ (КРУПНЫЕ КНОПКИ ВЫПОЛНЕНИЯ С ОТКЛИКОМ) -->
+            <!-- БАННЕР ПЕРВИЧНОЙ СИНХРОНИЗАЦИИ (ПОКАЗЫВАЕТСЯ НА ПУСТОМ ШАБЛОНЕ) -->
+            <section id="empty-template-banner" class="neon-recommendation-card empty-sync-banner">
+                <div class="rec-card-top">
+                    <h2>📲 ПУСТОЙ ШАБЛОН — ГОТОВ К СИНХРОНИЗАЦИИ</h2>
+                    <span class="ai-Orbit-badge">Шаг 1</span>
+                </div>
+                <p class="rec-lead-text">
+                    Сейчас открыт чистый шаблон без предзаполненных данных. Нажми кнопку ниже, чтобы подгрузить показатели состояния с часов (HUAWEI / Apple Здоровье), расписание Календаря и список Задач:
+                </p>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <button class="btn-primary-neon" style="width:100%; padding:13px; font-size:0.9rem;" onclick="openLiveSyncModal()">
+                        🔄 Синхронизировать (Подгрузить Здоровье, Задачи и Календарь)
+                    </button>
+                    <button class="btn-secondary-neon" onclick="runPlannerShortcut()">
+                        ⌚ Запустить быструю команду «Планировщик» на iPhone
+                    </button>
+                </div>
+            </section>
+
+            <!-- СЕТКА BENTO 2x2: СОН, ГЛУБОКИЙ СОН, НАГРУЗКА, ШАГИ (ПРИ СТАРТЕ ПРОЧЕРКИ --) -->
+            <section class="bento-metrics-grid">
+                <div class="bento-card bento-sleep" onclick="openLiveSyncModal()">
+                    <div class="bento-left">
+                        <div class="bento-icon-circle cyan-glow">🌙</div>
+                        <div class="bento-text">
+                            <span class="bento-label">Сон:</span>
+                            <strong class="bento-value" id="metric-sleep-hours">-- <small>ч</small></strong>
+                        </div>
+                    </div>
+                    <div class="bento-moon-graphic"></div>
+                </div>
+
+                <div class="bento-card bento-deep" onclick="openLiveSyncModal()">
+                    <div class="bento-left">
+                        <div class="bento-icon-circle purple-glow">🟣</div>
+                        <div class="bento-text">
+                            <span class="bento-label">Восстановление:</span>
+                            <span class="bento-sub-inline">Глубокий сон <strong class="bento-value-inline" id="metric-deep-sleep">--</strong> <small>ч</small></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bento-card bento-calories" onclick="openLiveSyncModal()">
+                    <div class="bento-left">
+                        <div class="bento-icon-circle amber-glow">🔥</div>
+                        <div class="bento-text">
+                            <span class="bento-label">Нагрузка:</span>
+                            <strong class="bento-value"><span id="metric-calories">--</span> <small>/ 600 ккал</small></strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bento-card bento-steps" onclick="openLiveSyncModal()">
+                    <div class="bento-left">
+                        <div class="bento-icon-circle silver-glow">👟</div>
+                        <div class="bento-text">
+                            <span class="bento-label">Шаги (Часы):</span>
+                            <strong class="bento-value"><span id="steps-count">--</span> <small id="steps-goal">/ 10 000</small></strong>
+                        </div>
+                    </div>
+                    <svg viewBox="0 0 70 28" class="bento-step-wave">
+                        <path d="M0,16 L12,16 L18,6 L24,24 L30,8 L36,20 L42,10 L48,22 L54,14 L70,14" />
+                    </svg>
+                </div>
+            </section>
+
+            <!-- СЕЙЧАС В ФОКУСЕ -->
             <section class="glass-card focus-live-card" id="focus-card-section">
                 <div class="focus-card-header">
                     <div class="focus-badge-group">
                         <span class="live-pulse-dot"></span>
                         <span class="focus-tag">СЕЙЧАС В ФОКУСЕ</span>
                     </div>
-                    <span class="focus-time" id="focus-time">09:30 — 10:30</span>
+                    <span class="focus-time" id="focus-time">--:-- — --:--</span>
                 </div>
-                <h3 class="focus-title" id="focus-title">Защищённый блок: Главная стратегическая задача</h3>
-                <p class="focus-desc" id="focus-desc">Глубокий фокус (Категория А) • Расход энергии: −5.0%/ч. Без мессенджеров и чужих срочных просьб.</p>
+                <h3 class="focus-title" id="focus-title">Шаблон пуст — выполните синхронизацию</h3>
+                <p class="focus-desc" id="focus-desc">После синхронизации здесь появится приоритетная задача под ваш текущий уровень заряда батареи.</p>
 
                 <div class="focus-energy-impact" id="focus-energy-impact">
-                    <span>Влияние на батарею: <strong id="focus-cost-label">−5% заряда</strong></span>
-                    <span>Прогноз к вечеру: <strong id="evening-forecast-label">64%</strong></span>
+                    <span>Влияние на батарею: <strong id="focus-cost-label">--%</strong></span>
+                    <span>Прогноз к вечеру: <strong id="evening-forecast-label">--%</strong></span>
                 </div>
 
                 <div class="focus-actions">
@@ -197,12 +263,12 @@
                 </div>
             </section>
 
-            <!-- БЫСТРЫЙ СПИСОК ЗАДАЧ НА ГЛАВНОМ ЭКРАНЕ (ВЫБОР И ОТМЕТКА В 1 ТАП) -->
+            <!-- БЫСТРЫЙ СПИСОК ЗАДАЧ НА ГЛАВНОМ ЭКРАНЕ -->
             <section class="glass-card">
                 <div class="card-header-row">
                     <div>
                         <h2>✅ Задачи на сегодня (Нажми ✓ для выполнения)</h2>
-                        <p class="card-desc" style="margin-bottom:0;">Нажми галочку слева, чтобы отметить выполненным, или «🎯 В фокус» для работы сейчас</p>
+                        <p class="card-desc" style="margin-bottom:0;">Подгружаются после синхронизации или добавляются вручную</p>
                     </div>
                     <button class="hud-icon-btn" onclick="switchPage('tasks')">Все →</button>
                 </div>
@@ -217,18 +283,18 @@
                 </div>
 
                 <p class="rec-lead-text" id="main-ai-recommendation">
-                    <span class="highlight-start" id="rec-lead-prefix">⚡ ОТЛИЧНЫЙ СТАРТ!</span>
-                    <span id="rec-lead-body">Вы полны сил на 92%. Рекомендуется закрыть сложные задачи до 16:00, пока ресурс на пике. Избегайте перегрузок вечером, чтобы сохранить баланс.</span>
+                    <span class="highlight-start" id="rec-lead-prefix">⏳ ОЖИДАНИЕ СИНХРОНИЗАЦИИ:</span>
+                    <span id="rec-lead-body">Нажмите кнопку «Синхронизировать», чтобы загрузить данные сна, шагов, расписания и задач.</span>
                 </p>
 
                 <!-- Шкала риска перегрузки -->
                 <div class="overload-meter-block">
                     <div class="overload-bar-track">
                         <div class="overload-bar-gradient"></div>
-                        <div class="overload-marker" id="overload-marker" style="left: 15%;"></div>
+                        <div class="overload-marker" id="overload-marker" style="left: 0%;"></div>
                     </div>
                     <div class="overload-caption">
-                        Риск перегрузки: <strong id="overload-status-text" class="risk-low">Низкий (15%)</strong>
+                        Риск перегрузки: <strong id="overload-status-text" class="risk-low">--% (Нет данных)</strong>
                     </div>
                 </div>
 
@@ -249,53 +315,6 @@
                 <div id="recommendations-grid" class="recommendations-grid"></div>
             </section>
 
-            <!-- СЕТКА BENTO 2x2: СОН, ГЛУБОКИЙ СОН, НАГРУЗКА, ШАГИ -->
-            <section class="bento-metrics-grid">
-                <div class="bento-card bento-sleep" onclick="switchPage('health')">
-                    <div class="bento-left">
-                        <div class="bento-icon-circle cyan-glow">🌙</div>
-                        <div class="bento-text">
-                            <span class="bento-label">Сон:</span>
-                            <strong class="bento-value" id="metric-sleep-hours">8.2 <small>ч</small></strong>
-                        </div>
-                    </div>
-                    <div class="bento-moon-graphic"></div>
-                </div>
-
-                <div class="bento-card bento-deep" onclick="switchPage('health')">
-                    <div class="bento-left">
-                        <div class="bento-icon-circle purple-glow">🟣</div>
-                        <div class="bento-text">
-                            <span class="bento-label">Восстановление:</span>
-                            <span class="bento-sub-inline">Глубокий сон <strong class="bento-value-inline" id="metric-deep-sleep">3.1</strong> <small>ч</small></span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bento-card bento-calories" onclick="switchPage('health')">
-                    <div class="bento-left">
-                        <div class="bento-icon-circle amber-glow">🔥</div>
-                        <div class="bento-text">
-                            <span class="bento-label">Нагрузка:</span>
-                            <strong class="bento-value"><span id="metric-calories">310</span> <small>/ 600 ккал</small></strong>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bento-card bento-steps" onclick="openStepsModal()">
-                    <div class="bento-left">
-                        <div class="bento-icon-circle silver-glow">👟</div>
-                        <div class="bento-text">
-                            <span class="bento-label">Шаги:</span>
-                            <strong class="bento-value"><span id="steps-count">5 120</span> <small id="steps-goal">/ 10 000</small></strong>
-                        </div>
-                    </div>
-                    <svg viewBox="0 0 70 28" class="bento-step-wave">
-                        <path d="M0,16 L12,16 L18,6 L24,24 L30,8 L36,20 L42,10 L48,22 L54,14 L70,14" />
-                    </svg>
-                </div>
-            </section>
-
             <!-- КООРДИНАТОР СВОБОДНЫХ ОКОН -->
             <section class="glass-card coordinator-card">
                 <div class="card-header-row">
@@ -303,10 +322,10 @@
                         <span class="pulse-dot"></span>
                         <span>Координатор свободных окон</span>
                     </div>
-                    <span class="energy-tag" id="coordinator-energy-tag">🔥 Пик ресурса</span>
+                    <span class="energy-tag" id="coordinator-energy-tag">⏳ Шаблон</span>
                 </div>
                 <p class="assistant-text" id="assistant-text">
-                    Свободно окно 10:30 — 13:00. Высокий заряд! Какую задачу поставим?
+                    Синхронизируйте календарь или выберите задачу, чтобы заполнить расписание дня.
                 </p>
 
                 <div class="quick-chips">
@@ -331,24 +350,23 @@
             <section class="glass-card">
                 <div class="card-header-row">
                     <h2>📅 Календарь и Расписание дня</h2>
-                    <button class="btn-primary-neon" onclick="forceFullSync(true)">🔄 Обновить всё</button>
+                    <button class="btn-primary-neon" onclick="openLiveSyncModal()">🔄 Синхронизировать</button>
                 </div>
                 <p class="card-desc" id="calendar-sync-status-text">
-                    Нажми на галочку ✓ справа от любого слота, чтобы отметить его выполненным, или нажми на слот, чтобы поставить туда задачу из списка.
+                    При первом запуске расписание пустое. Нажмите «Синхронизировать», чтобы подгрузить слоты календаря и свободные окна.
                 </p>
                 <div class="quick-chips" style="margin-top: 10px;">
                     <button class="chip" onclick="autoFillScheduleByEnergy()">✨ Заполнить окна под мой заряд</button>
                     <button class="chip" onclick="protectMorningBlock()">🛡️ Защитить 1-й час (Кат. А)</button>
                     <button class="chip" onclick="openAddSlotModal()">+ Добавить свой слот</button>
-                    <button class="chip" onclick="resetScheduleToDefault()">🔄 Сбросить план дня</button>
-                    <button class="chip" onclick="openSyncHubModal()">📲 Инструкция Google + iOS</button>
+                    <button class="chip" onclick="resetToEmptyTemplate()">🧹 Очистить в пустой шаблон</button>
                 </div>
             </section>
 
             <section class="glass-card">
                 <div class="card-header-row">
                     <h2>Таймлайн дня (Нажми ✓ для выполнения)</h2>
-                    <span class="energy-tag" id="timeline-drain-summary">Баланс в норме</span>
+                    <span class="energy-tag" id="timeline-drain-summary">Ожидание синхр.</span>
                 </div>
                 <div id="timeline-list" class="timeline"></div>
             </section>
@@ -360,12 +378,12 @@
                 <div class="card-header-row">
                     <h2>📋 Банк задач (Выбор и Выполнение)</h2>
                     <div style="display:flex; gap:6px; align-items:center;">
-                        <span class="energy-tag" id="tasks-count-badge">5 активных</span>
-                        <button class="hud-icon-btn" onclick="forceFullSync(true)">🔄 Обновить</button>
+                        <span class="energy-tag" id="tasks-count-badge">0 активных</span>
+                        <button class="hud-icon-btn" onclick="openLiveSyncModal()">🔄 Синхр.</button>
                     </div>
                 </div>
                 <p class="card-desc">
-                    Нажми большую кнопку <strong>«✓»</strong> слева от задачи, чтобы отметить её как выполненную! Нажми <strong>«🎯 В фокус»</strong>, чтобы начать делать её прямо сейчас.
+                    При первом запуске список задач пуст. Подгрузите задачи через синхронизацию или добавьте свои ниже. Нажмите <strong>«✓»</strong> слева от задачи для выполнения!
                 </p>
 
                 <div class="task-filter-row">
@@ -413,66 +431,66 @@
         <main id="page-health" class="page-section">
             <section class="glass-card">
                 <div class="card-header-row">
-                    <h2>❤️ Синхронизация Здоровья и Сна</h2>
-                    <span class="energy-tag" id="healthkit-sync-status">Автосинк v4.2</span>
+                    <h2>❤️ Синхронизация Здоровья и Часов</h2>
+                    <span class="energy-tag" id="healthkit-sync-status">Ожидание</span>
                 </div>
                 <p class="card-desc" id="last-sync-label">
-                    Последнее обновление: Сегодня утром автоматически.
+                    Статус: Шаблон пуст. Выполните синхронизацию для загрузки показателей сна, шагов и пульса.
                 </p>
 
                 <div class="quick-chips" style="margin: 12px 0;">
-                    <button class="btn-primary-neon" onclick="forceFullSync(true)">🔄 Принудительное обновление данных</button>
-                    <button class="chip" onclick="runPlannerShortcut()">📲 Запустить команду «Планировщик»</button>
-                    <button class="chip" onclick="openSyncHubModal()">📖 Инструкция настройки</button>
+                    <button class="btn-primary-neon" onclick="openLiveSyncModal()">🔄 Синхронизировать и загрузить данные</button>
+                    <button class="chip" onclick="runPlannerShortcut()">⌚ Запустить команду «Планировщик»</button>
+                    <button class="chip" onclick="resetToEmptyTemplate()">🧹 Сбросить в пустой шаблон</button>
                 </div>
 
-                <!-- Ползунки биометрии для тонкой калибровки и теста цветовых зон -->
+                <!-- Ползунки биометрии -->
                 <div class="health-slider-group">
                     <div class="health-control-row">
                         <div class="health-control-header">
                             <span>🌙 Общее время сна (8.0+ ч = 70% базы)</span>
-                            <span class="health-control-val" id="val-sleep-hours">8.2 ч</span>
+                            <span class="health-control-val" id="val-sleep-hours">-- ч</span>
                         </div>
-                        <input type="range" id="slider-sleep" min="3.0" max="10.0" step="0.1" value="8.2" oninput="updateHealthMetric('sleepHours', this.value)" />
+                        <input type="range" id="slider-sleep" min="3.0" max="10.0" step="0.1" value="7.5" oninput="updateHealthMetric('sleepHours', this.value)" />
                     </div>
 
                     <div class="health-control-row">
                         <div class="health-control-header">
                             <span>🟣 Глубокий сон (цель: 3.0 ч = +25% заряда)</span>
-                            <span class="health-control-val" id="val-deep-sleep">3.1 ч</span>
+                            <span class="health-control-val" id="val-deep-sleep">-- ч</span>
                         </div>
-                        <input type="range" id="slider-deep" min="0.5" max="4.5" step="0.1" value="3.1" oninput="updateHealthMetric('deepSleepHours', this.value)" />
+                        <input type="range" id="slider-deep" min="0.5" max="4.5" step="0.1" value="2.4" oninput="updateHealthMetric('deepSleepHours', this.value)" />
                     </div>
 
                     <div class="health-control-row">
                         <div class="health-control-header">
                             <span>🕘 Время отхода ко сну (до 23:30 = бонус +5%)</span>
-                            <input type="time" id="input-bedtime" value="22:45" onchange="updateHealthMetric('bedtime', this.value)" class="time-input-neon" />
+                            <input type="time" id="input-bedtime" value="23:15" onchange="updateHealthMetric('bedtime', this.value)" class="time-input-neon" />
                         </div>
                     </div>
 
                     <div class="health-control-row">
                         <div class="health-control-header">
                             <span>🔥 Активные калории (нагрузка за день)</span>
-                            <span class="health-control-val" id="val-calories">310 ккал</span>
+                            <span class="health-control-val" id="val-calories">-- ккал</span>
                         </div>
-                        <input type="range" id="slider-calories" min="50" max="1500" step="10" value="310" oninput="updateHealthMetric('activeCalories', this.value)" />
+                        <input type="range" id="slider-calories" min="50" max="1500" step="10" value="480" oninput="updateHealthMetric('activeCalories', this.value)" />
                     </div>
 
                     <div class="health-control-row">
                         <div class="health-control-header">
                             <span>👟 Шаги (Huawei Watch / iPhone)</span>
-                            <span class="health-control-val" id="val-steps">5 120 шагов</span>
+                            <span class="health-control-val" id="val-steps">-- шагов</span>
                         </div>
-                        <input type="range" id="slider-steps" min="500" max="20000" step="100" value="5120" oninput="updateHealthMetric('steps', this.value)" />
+                        <input type="range" id="slider-steps" min="0" max="20000" step="100" value="6400" oninput="updateHealthMetric('steps', this.value)" />
                     </div>
 
                     <div class="health-control-row">
                         <div class="health-control-header">
                             <span>💓 Пульс в покое (маркер восстановления ЦНС)</span>
-                            <span class="health-control-val" id="val-hr">58 уд/мин</span>
+                            <span class="health-control-val" id="val-hr">-- уд/мин</span>
                         </div>
-                        <input type="range" id="slider-hr" min="44" max="95" step="1" value="58" oninput="updateHealthMetric('restingHR', this.value)" />
+                        <input type="range" id="slider-hr" min="44" max="95" step="1" value="55" oninput="updateHealthMetric('restingHR', this.value)" />
                     </div>
                 </div>
             </section>
@@ -480,7 +498,7 @@
             <!-- Быстрый тест 3 цветовых градиентов интерфейса -->
             <section class="glass-card">
                 <h2>🎨 Проверка цветовых градиентов от батареи</h2>
-                <p class="card-desc">Нажми на любой диапазон, чтобы увидеть, как меняется цвет батареи и градиент всего приложения:</p>
+                <p class="card-desc">Нажми на любой диапазон, чтобы протестировать свечение интерфейса:</p>
                 <div class="quick-chips">
                     <button class="chip" onclick="applyTestBatteryLevel(92)">🟢 80–100% (Светло-зелёный)</button>
                     <button class="chip" onclick="applyTestBatteryLevel(65)">🟡 50–79% (Светло-жёлтый)</button>
@@ -498,7 +516,7 @@
             <section class="glass-card">
                 <h2>📲 Ссылка для твоей команды «Планировщик» на iPhone</h2>
                 <p class="card-desc">
-                    Эта ссылка открывает приложение и автоматически запускает утреннюю синхронизацию:
+                    Когда команда «Планировщик» открывает эту ссылку, приложение автоматически заполняет пустой шаблон переданными показателями:
                 </p>
                 <div class="code-box" id="healthkit-shortcut-url" onclick="copyShortcutUrl()"></div>
                 <button class="btn-primary-neon" style="width:100%; margin-top: 8px;" onclick="copyShortcutUrl()">📋 Скопировать ссылку для команды «Планировщик»</button>
@@ -529,6 +547,90 @@
         </div>
     </nav>
 
+    <!-- МОДАЛЬНОЕ ОКНО: СИНХРОНИЗАЦИЯ И ПОДГРУЗКА ДАННЫХ В ПУСТОЙ ШАБЛОН (v4.3) -->
+    <div id="live-sync-modal" class="modal hidden">
+        <div class="modal-content modal-neon">
+            <div class="modal-header">
+                <h3>🔄 Синхронизация: Часы + Календарь + Задачи</h3>
+                <button class="mini-btn" onclick="closeAllModals()">✕</button>
+            </div>
+            <p class="card-desc">
+                Проверьте или введите актуальные показатели с часов <strong>HUAWEI Health / Apple Здоровье</strong>, после чего нажмите кнопку синхронизации — пустой шаблон мгновенно заполнится данными состояния, расписанием и задачами:
+            </p>
+
+            <!-- Поля актуальных данных с часов для мгновенной синхронизации -->
+            <div class="sync-inputs-grid">
+                <div class="sync-field">
+                    <label>🌙 Сон сегодня (ч)</label>
+                    <input type="number" id="sync-input-sleep" step="0.1" value="7.4" class="time-input-neon" />
+                </div>
+                <div class="sync-field">
+                    <label>🟣 Глубокий сон (ч)</label>
+                    <input type="number" id="sync-input-deep" step="0.1" value="2.3" class="time-input-neon" />
+                </div>
+                <div class="sync-field">
+                    <label>🕘 Время отбоя</label>
+                    <input type="time" id="sync-input-bedtime" value="23:20" class="time-input-neon" />
+                </div>
+                <div class="sync-field">
+                    <label>👟 Шаги с часов</label>
+                    <input type="number" id="sync-input-steps" step="100" value="6400" class="time-input-neon" />
+                </div>
+                <div class="sync-field">
+                    <label>🔥 Активные ккал</label>
+                    <input type="number" id="sync-input-calories" step="10" value="480" class="time-input-neon" />
+                </div>
+                <div class="sync-field">
+                    <label>💓 Пульс покоя</label>
+                    <input type="number" id="sync-input-hr" step="1" value="55" class="time-input-neon" />
+                </div>
+            </div>
+
+            <!-- Анимированный статус процесса синхронизации -->
+            <div id="sync-progress-box" class="sync-progress-box hidden">
+                <div id="sync-step-text" style="font-size:0.8rem; font-weight:700; color:var(--aura-bright); margin-bottom:6px;">
+                    ⏳ Подключение к HUAWEI Health / Apple HealthKit...
+                </div>
+                <div class="overload-bar-track">
+                    <div id="sync-progress-bar" style="width:15%; height:100%; border-radius:99px; background:var(--aura-bright); transition: width 0.3s ease;"></div>
+                </div>
+            </div>
+
+            <button class="btn-primary-neon" style="width:100%; padding:13px; font-size:0.9rem; margin-top:6px;" onclick="executeLiveTemplateSync()">
+                ⚡ Синхронизировать и заполнить шаблон
+            </button>
+
+            <div class="perm-list" style="margin-top:8px;">
+                <div class="perm-item" style="flex-direction: column; align-items: stretch;">
+                    <div>
+                        <strong>⌚ Авто-запрос через команду «Планировщик» (iOS)</strong>
+                        <p>Запускает системную команду iPhone для передачи параметров из Apple Здоровье и Календаря</p>
+                    </div>
+                    <div style="display:flex; gap:6px; margin-top:6px;">
+                        <input type="text" id="shortcut-name-input" value="Планировщик" style="flex:1; padding:8px; border-radius:8px; background:#050912; color:#fff; border:1px solid rgba(255,255,255,0.2); font-size:0.8rem;" />
+                        <button class="perm-btn" onclick="runPlannerShortcut()">📲 Запустить</button>
+                    </div>
+                </div>
+
+                <div class="perm-item" style="flex-direction: column; align-items: stretch;">
+                    <div>
+                        <strong>📅 Импорт своего файла Календаря (.ics) или текста встреч</strong>
+                    </div>
+                    <input type="file" id="ics-file-input" accept=".ics,text/calendar" onchange="importIcsCalendar(event)" style="font-size:0.74rem; margin-top:6px; color:var(--aura-bright);" />
+                    <div style="display:flex; gap:6px; margin-top:6px;">
+                        <input type="text" id="quick-cal-paste-input" placeholder="10:30-12:30|Выезд ЖК Lucky; 14:30-16:00|Созвон с Олегом" style="flex:1; font-size:0.74rem; padding:8px; border-radius:8px; background:#050912; color:#fff; border:1px solid rgba(255,255,255,0.16);" />
+                        <button class="perm-btn" onclick="importQuickPastedEvents()">Импорт</button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:8px; margin-top:6px;">
+                <button class="btn-secondary-neon" style="flex:1;" onclick="resetToEmptyTemplate(); closeAllModals();">🧹 Сбросить в пустой шаблон</button>
+                <button class="btn-secondary-neon" style="flex:1;" onclick="closeAllModals()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
     <!-- МОДАЛЬНОЕ ОКНО: БЫСТРЫЙ ВЫБОР ЗАДАЧИ ДЛЯ ПОСТАНОВКИ В ФОКУС ИЛИ СЛОТ -->
     <div id="task-picker-modal" class="modal hidden">
         <div class="modal-content modal-neon">
@@ -539,59 +641,6 @@
             <p class="card-desc">Нажми на любую задачу ниже, чтобы поставить её в текущий фокус или сразу отметить выполненной:</p>
             <div id="modal-task-picker-list" class="perm-list"></div>
             <button class="btn-secondary-neon" style="margin-top:8px;" onclick="closeAllModals()">Закрыть</button>
-        </div>
-    </div>
-
-    <!-- МОДАЛЬНОЕ ОКНО: ИНСТРУКЦИЯ И ЦЕНТР СИНХРОНИЗАЦИИ (БЕЗ ОШИБКИ RITMSYNC) -->
-    <div id="sync-hub-modal" class="modal hidden">
-        <div class="modal-content modal-neon">
-            <div class="modal-header">
-                <h3>📲 Центр синхронизации и Инструкция</h3>
-                <button class="mini-btn" onclick="closeAllModals()">✕</button>
-            </div>
-
-            <div class="perm-list">
-                <!-- Блок 1: Принудительное обновление -->
-                <div class="perm-item" style="flex-direction: column; align-items: stretch;">
-                    <div>
-                        <strong>1. Принудительное обновление прямо сейчас</strong>
-                        <p>Пересчитывает батарею, обновляет день, очищает дубликаты и распределяет задачи под твой заряд</p>
-                    </div>
-                    <button class="btn-primary-neon" style="margin-top:6px;" onclick="forceFullSync(true); closeAllModals();">🔄 Выполнить принудительное обновление</button>
-                </div>
-
-                <!-- Блок 2: Команда «Планировщик» на iPhone -->
-                <div class="perm-item" style="flex-direction: column; align-items: stretch;">
-                    <div>
-                        <strong>2. Связь с твоей командой «Планировщик» (iOS)</strong>
-                        <p>Раньше возникала ошибка «Не удалось найти RitmSync», потому что твоя команда называется <b>«Планировщик»</b>. Теперь имя исправлено:</p>
-                    </div>
-                    <div style="display:flex; gap:6px; margin-top:6px;">
-                        <input type="text" id="shortcut-name-input" value="Планировщик" placeholder="Имя команды в iOS" style="flex:1; padding:8px; border-radius:8px; background:#050912; color:#fff; border:1px solid rgba(255,255,255,0.2); font-size:0.8rem;" />
-                        <button class="perm-btn" onclick="runPlannerShortcut()">📲 Запустить</button>
-                    </div>
-                </div>
-
-                <!-- Блок 3: Пошаговая инструкция Google + Apple без сложных ключей -->
-                <div class="perm-item" style="flex-direction: column; align-items: stretch;">
-                    <div>
-                        <strong>3. Инструкция: как подключить Google Календарь и Задачи без паролей в браузере</strong>
-                        <p style="margin-top:4px; line-height:1.45; color:#cbd5e1;">
-                            • Открой на iPhone <b>Настройки → Приложения → Календарь → Учётные записи</b>.<br/>
-                            • Нажми <b>«Добавить учётную запись» → Google</b> и войди в свой Gmail.<br/>
-                            • Включи тумблеры <b>«Календари»</b> и <b>«Напоминания»</b>.<br/>
-                            • Теперь все события из Google автоматически видны на iPhone! Также можно загрузить файл <code>.ics</code> или вставить список встреч ниже:
-                        </p>
-                    </div>
-                    <input type="file" id="ics-file-input" accept=".ics,text/calendar" onchange="importIcsCalendar(event)" style="font-size:0.74rem; margin-top:6px; color:var(--aura-bright);" />
-                    <div style="display:flex; gap:6px; margin-top:6px;">
-                        <input type="text" id="quick-cal-paste-input" placeholder="10:30-12:30|Выезд ЖК Lucky; 14:30-16:00|Созвон с Олегом" style="flex:1; font-size:0.74rem; padding:8px; border-radius:8px; background:#050912; color:#fff; border:1px solid rgba(255,255,255,0.16);" />
-                        <button class="perm-btn" onclick="importQuickPastedEvents()">Импорт</button>
-                    </div>
-                </div>
-            </div>
-
-            <button class="btn-secondary-neon" style="margin-top:8px;" onclick="closeAllModals()">Понятно, закрыть</button>
         </div>
     </div>
 
@@ -621,22 +670,6 @@
             </select>
 
             <button class="btn-primary-neon" onclick="saveNewSlot()">Сохранить в план</button>
-        </div>
-    </div>
-
-    <!-- МОДАЛЬНОЕ ОКНО: ШАГИ -->
-    <div id="steps-modal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>👟 Шаги (HUAWEI / Apple Health)</h3>
-                <button class="mini-btn" onclick="closeAllModals()">✕</button>
-            </div>
-            <p class="card-desc">Введите количество шагов:</p>
-            <input type="number" id="steps-input" placeholder="6400" />
-            <div style="display:flex; gap:8px; margin-top:8px;">
-                <button class="btn-secondary-neon" style="flex:1;" onclick="closeAllModals()">Отмена</button>
-                <button class="btn-primary-neon" style="flex:1;" onclick="saveStepsManual()">Сохранить</button>
-            </div>
         </div>
     </div>
 
