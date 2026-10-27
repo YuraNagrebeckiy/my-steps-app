@@ -1743,3 +1743,11 @@ input[type="range"] {
     cursor: pointer;
     white-space: nowrap;
 }
+
+
+/* ==================== v4.4: доработки ==================== */
+.hold-point-item:focus-visible { outline: 2px solid var(--aura-bright); outline-offset: 2px; }
+.modal-content { max-height: calc(100dvh - 40px); overflow-y: auto; }
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

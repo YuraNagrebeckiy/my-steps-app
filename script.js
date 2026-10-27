@@ -1,5 +1,5 @@
 /**
- * Ритм Дня v4.3 — Биометрическая система управления энергией, Календарём и Задачами
+ * Ритм Дня v4.5 (облако) — Биометрическая система управления энергией, Календарём и Задачами
  * Оптимизировано для iPhone 16 Pro Max (iOS 27.0.1)
  * Ключевое отличие v4.3:
  *  - При первом запуске (и до синхронизации) приложение находится в состоянии ПУСТОГО ШАБЛОНА (isSynced: false):
@@ -8,7 +8,16 @@
  *    подгружаются актуальные показатели состояния, задачи и слоты календаря, и включается цветовой градиент (80-100%, 50-79%, <=49%).
  */
 
-const STORAGE_KEY = 'ritm_dnya_state_v4_3';
+const STORAGE_KEY = 'ritm_dnya_state_v4_3'; // ключ не меняем — данные v4.3 сохраняются
+const todayStr = () => {
+    // Локальная дата (а не UTC): toISOString() после 00:00 по местному времени давал «вчера»
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+// Значения по умолчанию, если с часов пришла только часть данных. Помечаются как «оценочные».
+const HEALTH_DEFAULTS = { sleepHours: 7.4, deepSleepHours: 2.3, bedtime: '23:20', activeCalories: 480, steps: 6400, restingHR: 55 };
+const numOr = (v, fallback) => (Number.isFinite(v) ? v : fallback); // в отличие от «||» не заменяет 0
+const safeDecode = (str) => { try { return decodeURIComponent(str); } catch (_) { return str; } };
 
 const TASK_ENERGY_RATES = {
     high: -5.0,    // Категория А: сложные узлы, конструктив, высокий риск
@@ -71,10 +80,16 @@ const emptyInitialState = {
     schedule: [], // Пусто до синхронизации!
     tasks: [],    // Пусто до синхронизации!
     activeTaskFilter: 'all',
-    currentPage: 'home'
+    currentPage: 'home',
+    lastActiveDate: null,
+    updatedAt: 0,
+    lastInboxId: null,
+    estimatedFields: []
 };
 
 let state = loadState();
+const serializeForCompare = (st) => { const { updatedAt, ...rest } = st; return JSON.stringify(rest); };
+let lastSerialized = serializeForCompare(state);
 let audioCtx = null;
 let toastTimeout = null;
 
@@ -153,23 +168,57 @@ function loadState() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return JSON.parse(JSON.stringify(emptyInitialState));
-        const parsed = JSON.parse(raw);
-        return {
-            ...emptyInitialState,
-            ...parsed,
-            health: { ...emptyInitialState.health, ...(parsed.health || {}) },
-            syncMeta: { ...emptyInitialState.syncMeta, ...(parsed.syncMeta || {}) },
-            schedule: Array.isArray(parsed.schedule) ? deduplicateScheduleArray(parsed.schedule) : [],
-            tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
-            holdPoints: Array.isArray(parsed.holdPoints) ? parsed.holdPoints : emptyInitialState.holdPoints
-        };
+        return normalizeState(JSON.parse(raw));
     } catch (e) {
         return JSON.parse(JSON.stringify(emptyInitialState));
     }
 }
 
+// Приводит любой сохранённый/облачный снимок к актуальной структуре
+function normalizeState(parsed) {
+    parsed = parsed && typeof parsed === 'object' ? parsed : {};
+    return {
+        ...JSON.parse(JSON.stringify(emptyInitialState)),
+        ...parsed,
+        health: { ...emptyInitialState.health, ...(parsed.health || {}) },
+        syncMeta: { ...emptyInitialState.syncMeta, ...(parsed.syncMeta || {}) },
+        schedule: Array.isArray(parsed.schedule) ? deduplicateScheduleArray(parsed.schedule) : [],
+        tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+        holdPoints: Array.isArray(parsed.holdPoints) ? parsed.holdPoints : JSON.parse(JSON.stringify(emptyInitialState.holdPoints))
+    };
+}
+
+// Новый день: сбрасываем отметки «выполнено», внешние события вчерашнего дня и ручную коррекцию.
+// Без этого встречи из Календаря копились бы бесконечно, а вчерашние галочки влияли на заряд сегодня.
+function rolloverIfNewDay() {
+    const today = todayStr();
+    if (state.lastActiveDate === today) return false;
+    if (state.lastActiveDate) {
+        state.schedule = state.schedule.filter(s => !s.source);
+        state.schedule.forEach(s => { s.done = false; });
+        state.tasks = state.tasks.filter(t => !t.done);
+        state.holdPoints.forEach(h => { h.done = false; });
+        state.manualOffset = 0;
+        state.selectedTaskId = null;
+    }
+    state.lastActiveDate = today;
+    return true;
+}
+
+function isHealthStale() {
+    return state.isSynced && state.health.lastSyncDate && state.health.lastSyncDate !== todayStr();
+}
+
 function saveState() {
     try {
+        // updatedAt меняется только при реальных изменениях — иначе «старое» устройство
+        // перетирало бы свежие данные облака обычной перерисовкой экрана
+        const ser = serializeForCompare(state);
+        if (ser !== lastSerialized) {
+            lastSerialized = ser;
+            state.updatedAt = Date.now();
+            scheduleCloudPush();
+        }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) {
         console.warn('Ошибка сохранения localStorage:', e);
@@ -178,7 +227,9 @@ function saveState() {
 
 // Сброс в чистый пустой шаблон (как при самом первом запуске)
 function resetToEmptyTemplate() {
+    const keepInbox = state.lastInboxId; // чтобы уже применённое сообщение из облака не вернуло данные обратно
     state = JSON.parse(JSON.stringify(emptyInitialState));
+    state.lastInboxId = keepInbox;
     saveState();
     renderAll();
     showToast('Включён чистый пустой шаблон (ожидание синхронизации)', '🧹');
@@ -187,20 +238,12 @@ function resetToEmptyTemplate() {
 function deduplicateScheduleArray(scheduleArr) {
     if (!Array.isArray(scheduleArr)) return [];
     const seenKeys = new Set();
-    let count1900 = 0;
     const cleaned = [];
 
     for (const slot of scheduleArr) {
         if (!slot || !slot.title) continue;
-        const normTitle = slot.title.trim().toLowerCase();
-        const timeKey = `${slot.start}-${slot.end}`;
-
-        if (timeKey === '19:00-20:00') {
-            count1900++;
-            if (count1900 > 1) continue;
-        }
-
-        const uniqueKey = normTitle === 'свободное окно' ? `${timeKey}|free` : normTitle;
+        // Ключ = время + название: одинаковые задачи в РАЗНОЕ время больше не склеиваются
+        const uniqueKey = `${slot.start}-${slot.end}|${slot.title.trim().toLowerCase()}`;
         if (seenKeys.has(uniqueKey)) continue;
         seenKeys.add(uniqueKey);
         cleaned.push(slot);
@@ -229,11 +272,21 @@ function openLiveSyncModal() {
     const shortcutInput = document.getElementById('shortcut-name-input');
     if (shortcutInput) shortcutInput.value = state.shortcutName || 'Планировщик';
 
+    const cfg = getCloudCfg();
+    const urlIn = document.getElementById('cloud-url-input');
+    const tokIn = document.getElementById('cloud-token-input');
+    if (urlIn && cfg) urlIn.value = cfg.url;
+    if (tokIn && cfg) tokIn.value = cfg.token;
+    setCloudStatus(cloudStatus);
+
     modal.classList.remove('hidden');
 }
 
 // Пошаговая синхронизация, которая заполняет пустой шаблон данными состояния, календаря и задач
+let syncInProgress = false;
 function executeLiveTemplateSync() {
+    if (syncInProgress) return; // защита от двойного нажатия
+    syncInProgress = true;
     const progressBox = document.getElementById('sync-progress-box');
     const stepText = document.getElementById('sync-step-text');
     const progressBar = document.getElementById('sync-progress-bar');
@@ -242,12 +295,21 @@ function executeLiveTemplateSync() {
     if (stepText) stepText.textContent = '1/3 • Чтение показателей состояния (HUAWEI Health / HealthKit)...';
     if (progressBar) progressBar.style.width = '35%';
 
-    const sleepVal = parseFloat(document.getElementById('sync-input-sleep')?.value) || 7.4;
-    const deepVal = parseFloat(document.getElementById('sync-input-deep')?.value) || 2.3;
-    const bedtimeVal = document.getElementById('sync-input-bedtime')?.value || '23:20';
-    const stepsVal = parseInt(document.getElementById('sync-input-steps')?.value, 10) || 6400;
-    const calVal = parseInt(document.getElementById('sync-input-calories')?.value, 10) || 480;
-    const hrVal = parseInt(document.getElementById('sync-input-hr')?.value, 10) || 55;
+    const estimated = [];
+    const readNum = (id, key, parser) => {
+        const raw = document.getElementById(id)?.value;
+        const v = parser(String(raw ?? '').replace(',', '.'));
+        if (Number.isFinite(v)) return v;
+        estimated.push(key);
+        return HEALTH_DEFAULTS[key];
+    };
+    const sleepVal = readNum('sync-input-sleep', 'sleepHours', parseFloat);
+    const deepVal = readNum('sync-input-deep', 'deepSleepHours', parseFloat);
+    const stepsVal = readNum('sync-input-steps', 'steps', v => parseInt(v, 10));
+    const calVal = readNum('sync-input-calories', 'activeCalories', v => parseInt(v, 10));
+    const hrVal = readNum('sync-input-hr', 'restingHR', v => parseInt(v, 10));
+    let bedtimeVal = document.getElementById('sync-input-bedtime')?.value;
+    if (!bedtimeVal) { bedtimeVal = HEALTH_DEFAULTS.bedtime; estimated.push('bedtime'); }
 
     setTimeout(() => {
         if (stepText) stepText.textContent = '2/3 • Подгрузка расписания Календаря и свободных окон...';
@@ -270,8 +332,10 @@ function executeLiveTemplateSync() {
         state.health.restingHR = hrVal;
 
         const nowTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-        state.health.lastSync = `Синхронизировано в ${nowTime} (Часы + Календарь + Задачи)`;
-        state.health.lastSyncDate = new Date().toISOString().slice(0, 10);
+        state.estimatedFields = estimated;
+        state.health.lastSync = `Синхронизировано в ${nowTime}` + (estimated.length ? ` • оценочно: ${estimated.length} из 6 показателей` : '');
+        state.health.lastSyncDate = todayStr();
+        rolloverIfNewDay();
 
         // Если шаблон расписания пуст — подгружаем расписание дня
         if (!state.schedule || state.schedule.length === 0) {
@@ -285,6 +349,7 @@ function executeLiveTemplateSync() {
 
         state.syncMeta.lastCalendarSync = `Синхронизировано сегодня в ${nowTime} • Активно слотов: ${state.schedule.length}`;
 
+        syncInProgress = false;
         if (progressBox) progressBox.classList.add('hidden');
         closeAllModals();
         playTactileClick(true);
@@ -295,8 +360,12 @@ function executeLiveTemplateSync() {
 
 // Автоматическая синхронизация при переходе по ссылке из команды «Планировщик» (?sleep=...&steps=...)
 function parseUrlHealthTelemetry() {
+    return applyTelemetryParams(new URLSearchParams(window.location.search), true);
+}
+
+// Общий разбор параметров: приходят либо из адресной строки, либо из облачного «inbox» команды iPhone
+function applyTelemetryParams(params, fromUrl) {
     try {
-        const params = new URLSearchParams(window.location.search);
         let updated = false;
 
         if (params.has('sleep')) {
@@ -330,16 +399,17 @@ function parseUrlHealthTelemetry() {
         if (params.has('autoSync')) {
             updated = true;
         }
+        const estimated = [];
 
         // Если пришли данные из URL — активируем синхронизированный режим и заполняем пустой шаблон!
         if (updated) {
             state.isSynced = true;
-            if (state.health.sleepHours === null) state.health.sleepHours = 7.4;
-            if (state.health.deepSleepHours === null) state.health.deepSleepHours = 2.3;
-            if (state.health.bedtime === '--:--') state.health.bedtime = '23:20';
-            if (state.health.activeCalories === null) state.health.activeCalories = 480;
-            if (state.health.steps === null) state.health.steps = 6400;
-            if (state.health.restingHR === null) state.health.restingHR = 55;
+            rolloverIfNewDay(); // новый день → чистые отметки, потом применяем свежие события
+            Object.keys(HEALTH_DEFAULTS).forEach(k => {
+                const missing = state.health[k] === null || state.health[k] === undefined || state.health[k] === '--:--';
+                if (missing) { state.health[k] = HEALTH_DEFAULTS[k]; estimated.push(k); }
+            });
+            state.estimatedFields = estimated;
 
             if (!state.schedule || state.schedule.length === 0) {
                 state.schedule = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_SCHEDULE));
@@ -360,15 +430,17 @@ function parseUrlHealthTelemetry() {
             }
 
             const timeStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-            state.health.lastSync = `Синхронизировано из «Планировщика» в ${timeStr}`;
-            state.health.lastSyncDate = new Date().toISOString().slice(0, 10);
+            state.health.lastSync = `Синхронизировано из «Планировщика» в ${timeStr}` + (estimated.length ? ` • оценочно: ${estimated.length} из 6` : '');
+            state.health.lastSyncDate = todayStr();
             state.syncMeta.lastCalendarSync = `Подгружено из команды «Планировщик» (${timeStr})`;
-            window.history.replaceState({}, document.title, window.location.pathname);
+            if (fromUrl) window.history.replaceState({}, document.title, window.location.pathname);
             saveState();
             setTimeout(() => showToast(`Синхронизировано! Заряд: ${getBatteryScore()}%`, '📲'), 200);
         }
+        return updated;
     } catch (e) {
         console.warn('Ошибка чтения URL-параметров:', e);
+        return false;
     }
 }
 
@@ -389,12 +461,12 @@ function parseBedtimePoints(bedtimeStr) {
     if (!bedtimeStr || typeof bedtimeStr !== 'string' || bedtimeStr === '--:--') return 0;
     const [h, m] = bedtimeStr.split(':').map(Number);
     if (isNaN(h)) return 0;
-    const dec = h + (m || 0) / 60;
-
-    if (dec >= 20 && dec <= 23.5) return 5;
-    if (dec > 23.5 || dec < 0.5) return 0;
-    if (dec >= 0.5 && dec <= 6) return -Math.min(12, Math.round(dec * 3.5));
-    return 0;
+    let dec = h + (m || 0) / 60;
+    if (dec < 6) dec += 24;               // 00:30 → 24.5, чтобы ночь шла непрерывно после 23:59
+    if (dec <= 23) return 5;              // отбой до 23:00 — полный бонус (как в правиле «батарейки»)
+    if (dec < 24) return Math.round(5 * (24 - dec)); // 23:00–24:00 — плавно 5 → 0
+    if (dec <= 30) return -Math.min(12, Math.round((dec - 24) * 3.5)); // после полуночи — штраф до −12
+    return 0;                             // дневное время (6:00–20:00) — не считается отбоем
 }
 
 function getSlotDurationHours(slot) {
@@ -561,17 +633,14 @@ function applyTestBatteryLevel(targetScore) {
     if (!state.isSynced) {
         // Если ещё не синхронизировано — сначала подгружаем шаблон
         state.isSynced = true;
-        state.health.sleepHours = 7.4;
-        state.health.deepSleepHours = 2.3;
-        state.health.bedtime = '23:20';
-        state.health.activeCalories = 480;
-        state.health.steps = 6400;
-        state.health.restingHR = 55;
+        Object.assign(state.health, HEALTH_DEFAULTS);
+        state.estimatedFields = Object.keys(HEALTH_DEFAULTS);
         if (!state.schedule.length) state.schedule = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_SCHEDULE));
         if (!state.tasks.length) state.tasks = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_TASKS));
     }
-    const currentWithoutOffset = calculateEnergyBreakdown().total - (state.manualOffset || 0);
-    state.manualOffset = targetScore - currentWithoutOffset;
+    state.manualOffset = 0;
+    const currentWithoutOffset = calculateEnergyBreakdown().total;
+    state.manualOffset = Math.max(-90, Math.min(90, targetScore - currentWithoutOffset));
     renderAll();
     showToast(`Включён цветовой режим: ${targetScore}%`, '🎨');
 }
@@ -613,7 +682,9 @@ function setTaskToFocusNow(taskId, event) {
     if (!task) return;
 
     task.done = false;
-    let focusSlot = state.schedule.find(s => !s.done && s.type !== 'routine') || state.schedule[1] || state.schedule[0];
+    // Приоритет: защищённый фокус-блок → свободное окно. Рутину и перерывы не затираем.
+    let focusSlot = state.schedule.find(s => !s.done && s.type === 'focus')
+        || state.schedule.find(s => !s.done && s.type === 'free');
     if (focusSlot) {
         focusSlot.title = task.title;
         focusSlot.type = task.complexity === 'rest' ? 'break' : 'focus';
@@ -643,7 +714,9 @@ function scheduleTaskToToday(taskId, event) {
     fillNearestFreeWindow(task.title, task.complexity || 'medium');
 }
 
-function openTaskPickerModal() {
+let pendingSlotId = null; // окно, по которому нажали в календаре
+function openTaskPickerModal(slotId = null) {
+    pendingSlotId = typeof slotId === 'string' ? slotId : null;
     if (!state.isSynced || state.tasks.length === 0) {
         openLiveSyncModal();
         return;
@@ -659,13 +732,28 @@ function openTaskPickerModal() {
                 <span class="slot-badge ${t.category === 'A' ? 'badge-high' : t.category === 'B' ? 'badge-medium' : 'badge-low'}">Кат. ${t.category}</span>
             </div>
             <div style="display:flex; gap:6px;">
-                <button class="btn-primary-neon" style="flex:1; padding:7px;" onclick="setTaskToFocusNow('${t.id}', event); closeAllModals();">🎯 В фокус сейчас</button>
+                <button class="btn-primary-neon" style="flex:1; padding:7px;" onclick="pickTaskForSlot('${t.id}', event)">${pendingSlotId ? '📅 В это окно' : '🎯 В фокус сейчас'}</button>
                 <button class="perm-btn" onclick="toggleTaskCompleted('${t.id}', event); closeAllModals();">${t.done ? '↩ Вернуть' : '✓ Выполнено'}</button>
             </div>
         </div>
     `).join('');
 
     modal.classList.remove('hidden');
+}
+
+function pickTaskForSlot(taskId, event) {
+    if (event) event.stopPropagation();
+    const task = state.tasks.find(t => t.id === taskId);
+    const slotId = pendingSlotId;
+    closeAllModals();
+    if (!task) return;
+    if (slotId && state.schedule.some(s => s.id === slotId)) {
+        task.done = false;
+        fillNearestFreeWindow(task.title, task.complexity || 'medium', slotId);
+    } else {
+        setTaskToFocusNow(taskId, null);
+    }
+    pendingSlotId = null;
 }
 
 /* =========================================================
@@ -700,7 +788,8 @@ function renderHeaderDate() {
     }
     const pillText = document.getElementById('sync-pill-text');
     if (pillText) {
-        pillText.textContent = state.isSynced ? '✓ Синхр. (Обновить)' : '🔄 Синхронизировать';
+        pillText.textContent = !state.isSynced ? '🔄 Синхронизировать'
+            : isHealthStale() ? '⚠ Данные за вчера — обновить' : '✓ Синхр. (Обновить)';
     }
 }
 
@@ -861,6 +950,14 @@ function renderMainRecommendationCard() {
     const riskText = document.getElementById('overload-status-text');
     const grid = document.getElementById('recommendations-grid');
 
+    const btnWork0 = document.getElementById('btn-mode-workday');
+    const btnWeek0 = document.getElementById('btn-mode-weekend');
+    if (btnWork0) btnWork0.classList.toggle('active', state.dayType === 'work');
+    if (btnWeek0) btnWeek0.classList.toggle('active', state.dayType === 'weekend');
+    document.querySelectorAll('.mood-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mood === state.morningMood);
+    });
+
     if (!state.isSynced) {
         if (prefixEl) prefixEl.textContent = '⏳ ШАБЛОН ОЖИДАЕТ СИНХРОНИЗАЦИИ:';
         if (bodyEl) bodyEl.textContent = 'После подгрузки данных с часов и календаря ИИ-координатор рассчитает ваш заряд и сформирует 4 персональные рекомендации.';
@@ -926,11 +1023,11 @@ function renderMainRecommendationCard() {
         grid.innerHTML = recs.map((r, idx) => `
             <div class="rec-item">
                 <div>
-                    <div class="rec-num">${r.num}</div>
-                    <div class="rec-title">${r.title}</div>
-                    <p class="rec-text">${r.text}</p>
+                    <div class="rec-num">${escapeHtml(r.num)}</div>
+                    <div class="rec-title">${escapeHtml(r.title)}</div>
+                    <p class="rec-text">${escapeHtml(r.text)}</p>
                 </div>
-                <button class="rec-action-btn" onclick="handleRecommendationAction(${idx})">${r.actionLabel}</button>
+                <button class="rec-action-btn" onclick="handleRecommendationAction(${idx})">${escapeHtml(r.actionLabel)}</button>
             </div>
         `).join('');
     }
@@ -938,7 +1035,7 @@ function renderMainRecommendationCard() {
 
 function generateFourRecommendations() {
     const score = getBatteryScore();
-    const isHigh = score >= 75;
+    const isHigh = score >= 80; // тот же порог, что у зелёной зоны
     const isWorkday = state.dayType === 'work';
 
     const heavyTask = (state.tasks.find(t => t.category === 'A' && !t.done) || {}).title || 'Согласовать с Олегом конструктив лестницы и узлы';
@@ -1007,7 +1104,7 @@ function renderFocusAndCoordinator() {
                 remainingDelta += (TASK_ENERGY_RATES[s.energy] ?? -1.5) * getSlotDurationHours(s);
             }
         });
-        const eveningForecast = Math.max(15, Math.min(100, Math.round(score + remainingDelta)));
+        const eveningForecast = Math.max(10, Math.min(100, Math.round(score + remainingDelta)));
         const forecastEl = document.getElementById('evening-forecast-label');
         if (forecastEl) forecastEl.textContent = `${eveningForecast}%`;
     }
@@ -1080,7 +1177,7 @@ function renderTimeline() {
 
         return `
             <div class="slot-item ${slot.id === activeSlot?.id ? 'current' : ''} ${isFree ? 'free-window' : ''} ${slot.done ? 'done' : ''}"
-                 onclick="openTaskPickerModal()">
+                 onclick="openTaskPickerModal('${slot.id}')">
                 <div class="slot-info">
                     <div class="slot-time">${slot.start} — ${slot.end} (${hrs.toFixed(1)} ч)</div>
                     <div class="slot-title">${escapeHtml(slot.title)}</div>
@@ -1124,10 +1221,10 @@ function renderTasksAndHoldPoints() {
     const hpList = document.getElementById('hold-points-list');
     if (hpList) {
         hpList.innerHTML = state.holdPoints.map(hp => `
-            <label class="hold-point-item" onclick="toggleHoldPoint('${hp.id}')">
-                <input type="checkbox" ${hp.done ? 'checked' : ''} onchange="event.stopPropagation(); toggleHoldPoint('${hp.id}')" />
+            <div class="hold-point-item" role="checkbox" aria-checked="${hp.done ? 'true' : 'false'}" tabindex="0" onclick="toggleHoldPoint('${hp.id}')">
+                <input type="checkbox" ${hp.done ? 'checked' : ''} tabindex="-1" style="pointer-events:none;" aria-hidden="true" />
                 <span style="${hp.done ? 'text-decoration:line-through; opacity:0.55;' : ''}">${escapeHtml(hp.title)}</span>
-            </label>
+            </div>
         `).join('');
     }
 }
@@ -1196,7 +1293,10 @@ function renderHealthPageBreakdown() {
         const cal = state.health.activeCalories ?? 480;
         const st = state.health.steps ?? 6400;
         const hr = state.health.restingHR ?? 55;
-        urlBox.textContent = `${base}?sleep=${sl}&deep=${dp}&bedtime=${bt}&calories=${cal}&steps=${st}&hr=${hr}&autoSync=1`;
+        const cfg = getCloudCfg();
+        urlBox.textContent = cfg
+            ? `${cfg.url}?action=ingest&token=${encodeURIComponent(cfg.token)}&sleep=${sl}&deep=${dp}&bedtime=${bt}&calories=${cal}&steps=${st}&hr=${hr}`
+            : `${base}?sleep=${sl}&deep=${dp}&bedtime=${bt}&calories=${cal}&steps=${st}&hr=${hr}&autoSync=1`;
     }
 }
 
@@ -1231,22 +1331,15 @@ function fillNearestFreeWindow(title, energy = 'medium', slotId = null) {
     if (!state.isSynced) {
         state.isSynced = true;
         if (state.health.sleepHours === null) {
-            state.health.sleepHours = 7.4;
-            state.health.deepSleepHours = 2.3;
-            state.health.bedtime = '23:20';
-            state.health.activeCalories = 480;
-            state.health.steps = 6400;
-            state.health.restingHR = 55;
+            Object.assign(state.health, HEALTH_DEFAULTS);
+            state.estimatedFields = Object.keys(HEALTH_DEFAULTS);
         }
     }
 
     let slot = slotId
         ? state.schedule.find(s => s.id === slotId)
         : state.schedule.find(s => s.type === 'free' && !s.done);
-
-    if (!slot) {
-        slot = state.schedule.find(s => !s.done && s.type !== 'routine');
-    }
+    // Если свободных окон нет — НЕ затираем чужой слот, а добавляем новый ниже.
 
     if (slot) {
         slot.title = cleanTitle;
@@ -1256,7 +1349,11 @@ function fillNearestFreeWindow(title, energy = 'medium', slotId = null) {
     } else {
         const sorted = [...state.schedule].sort((a, b) => timeToMinutes(a.end) - timeToMinutes(b.end));
         const lastEndMin = sorted.length ? timeToMinutes(sorted[sorted.length - 1].end) : 10 * 60;
-        const newStartMin = Math.min(21 * 60, Math.max(9 * 60, lastEndMin));
+        const newStartMin = Math.max(9 * 60, lastEndMin);
+        if (newStartMin >= 22 * 60) {
+            showToast('Нет свободного времени сегодня — освободите слот вручную', '⚠️');
+            return;
+        }
         const newEndMin = Math.min(22 * 60 + 30, newStartMin + 60);
 
         state.schedule.push({
@@ -1371,11 +1468,14 @@ function moveTomorrowToToday() {
         return;
     }
     const score = getBatteryScore();
-    const activeTasks = state.tasks.filter(t => !t.done);
-    const sorted = [...activeTasks].sort((a, b) => {
-        if (score >= 80) return (a.category === 'A' ? -1 : 1) - (b.category === 'A' ? -1 : 1);
-        return (a.category === 'C' ? -1 : 1) - (b.category === 'C' ? -1 : 1);
-    });
+    // Числовой приоритет вместо «-1/1» (такой компаратор нарушал контракт sort и давал случайный порядок)
+    const rank = (t) => score >= 80
+        ? ({ A: 0, B: 1, C: 2, REST: 3 }[t.category] ?? 2)
+        : ({ C: 0, REST: 1, B: 2, A: 3 }[t.category] ?? 2);
+    const alreadyPlanned = new Set(state.schedule.map(s => s.title.trim().toLowerCase()));
+    const sorted = state.tasks
+        .filter(t => !t.done && !alreadyPlanned.has(t.title.trim().toLowerCase()))
+        .sort((a, b) => rank(a) - rank(b));
 
     let count = 0;
     for (const task of sorted) {
@@ -1390,12 +1490,16 @@ function moveTomorrowToToday() {
     showToast(count > 0 ? `Распределено задач по окнам: ${count}` : 'Нет свободных окон для распределения', '✨');
 }
 
+function syncFilterChips() {
+    document.querySelectorAll('.task-filter-row .chip').forEach(btn => {
+        const m = (btn.getAttribute('onclick') || '').match(/filterTasks\('([^']*)'\)/);
+        btn.classList.toggle('active', !!m && m[1] === state.activeTaskFilter);
+    });
+}
+
 function filterTasks(cat) {
     state.activeTaskFilter = cat;
-    document.querySelectorAll('.task-filter-row .chip').forEach(btn => {
-        const onClickStr = btn.getAttribute('onclick') || '';
-        btn.classList.toggle('active', onClickStr.includes(`'${cat}'`));
-    });
+    syncFilterChips();
     renderAll();
 }
 
@@ -1452,15 +1556,13 @@ function changeSleepScore(delta) {
 function updateHealthMetric(key, val) {
     state.isSynced = true;
     if (state.health.sleepHours === null) {
-        state.health.sleepHours = 7.4;
-        state.health.deepSleepHours = 2.3;
-        state.health.bedtime = '23:20';
-        state.health.activeCalories = 480;
-        state.health.steps = 6400;
-        state.health.restingHR = 55;
+        Object.assign(state.health, HEALTH_DEFAULTS);
+        state.estimatedFields = Object.keys(HEALTH_DEFAULTS);
     }
     state.health[key] = key === 'bedtime' ? val : Number(val);
+    state.estimatedFields = (state.estimatedFields || []).filter(k => k !== key);
     state.health.lastSync = 'Откалибровано вручную • только что';
+    state.health.lastSyncDate = todayStr();
     if (!state.schedule.length) state.schedule = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_SCHEDULE));
     if (!state.tasks.length) state.tasks = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_TASKS));
     renderAll();
@@ -1524,7 +1626,7 @@ function protectMorningBlock() {
 
 function parseCalendarStringPayload(rawStr) {
     if (!rawStr || !rawStr.trim()) return [];
-    const decoded = decodeURIComponent(rawStr.trim());
+    const decoded = safeDecode(rawStr.trim());
     const events = [];
     const chunks = decoded.split(/[;\n]+/).map(s => s.trim()).filter(Boolean);
     chunks.forEach(chunk => {
@@ -1557,7 +1659,7 @@ function mergeExternalEventsIntoSchedule(externalEvents, sourceLabel = 'Кале
 }
 
 function importExternalTasksList(rawTasksInput, sourceLabel = 'Напоминания') {
-    const titles = decodeURIComponent(String(rawTasksInput || ''))
+    const titles = safeDecode(String(rawTasksInput || ''))
         .split(/[;\n|]+/)
         .map(s => s.trim())
         .filter(s => s.length > 2);
@@ -1573,30 +1675,52 @@ function importExternalTasksList(rawTasksInput, sourceLabel = 'Напомина�
     return added;
 }
 
+function icsDateTimeToLocal(raw) {
+    // 20261027T093000 или 20261027T063000Z (UTC → переводим в местное время)
+    const m = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?(Z)?$/);
+    if (!m) return null;
+    const [, y, mo, d, h, mi, sec = '00', z] = m;
+    const date = z
+        ? new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +sec))
+        : new Date(+y, +mo - 1, +d, +h, +mi, +sec);
+    return {
+        dateStr: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
+        time: `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+    };
+}
+
 function importIcsCalendar(event) {
-    const file = event?.target?.files?.[0];
+    const input = event?.target;
+    const file = input?.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = function (e) {
-        const content = String(e.target.result || '');
+        // «Разворачиваем» перенесённые строки ICS (строка, начинающаяся с пробела, продолжает предыдущую)
+        const content = String(e.target.result || '').replace(/\r?\n[ \t]/g, '');
         const blocks = content.split('BEGIN:VEVENT').slice(1);
+        const today = todayStr();
         const events = [];
         blocks.forEach(block => {
-            const summaryMatch = block.match(/SUMMARY[^:]*:(.+)/i);
-            const dtStartMatch = block.match(/DTSTART[^:]*:(\d{8}T\d{4,6})/i);
-            const dtEndMatch = block.match(/DTEND[^:]*:(\d{8}T\d{4,6})/i);
-            if (summaryMatch) {
-                const title = summaryMatch[1].trim();
-                const start = dtStartMatch ? `${dtStartMatch[1].slice(9, 11)}:${dtStartMatch[1].slice(11, 13)}` : '11:00';
-                const end = dtEndMatch ? `${dtEndMatch[1].slice(9, 11)}:${dtEndMatch[1].slice(11, 13)}` : addMinutes(start, 60);
-                events.push({ start, end, title });
-            }
+            const summaryMatch = block.match(/SUMMARY[^:\r\n]*:(.+)/i);
+            const dtStartMatch = block.match(/DTSTART[^:\r\n]*:(\d{8}T\d{4,6}Z?)/i);
+            const dtEndMatch = block.match(/DTEND[^:\r\n]*:(\d{8}T\d{4,6}Z?)/i);
+            if (!summaryMatch || !dtStartMatch) return; // события «на весь день» (без времени) пропускаем
+            const st = icsDateTimeToLocal(dtStartMatch[1]);
+            if (!st || st.dateStr !== today) return;     // берём ТОЛЬКО сегодняшние события
+            const en = dtEndMatch ? icsDateTimeToLocal(dtEndMatch[1]) : null;
+            const end = en && en.dateStr === today && timeToMinutes(en.time) > timeToMinutes(st.time)
+                ? en.time : addMinutes(st.time, 60);
+            events.push({ start: st.time, end, title: summaryMatch[1].trim().replace(/\\,/g, ',') });
         });
-        if (events.length > 0) {
-            mergeExternalEventsIntoSchedule(events.slice(0, 8), 'Импорт .ics');
+        const limited = events.slice(0, 12);
+        if (limited.length > 0) {
+            mergeExternalEventsIntoSchedule(limited, 'Импорт .ics');
             closeAllModals();
-            showToast(`Импортировано событий: ${events.length}`, '📅');
+            showToast(`Импортировано событий на сегодня: ${limited.length}`, '📅');
+        } else {
+            showToast('В файле нет событий на сегодня', 'ℹ️');
         }
+        input.value = ''; // позволяет выбрать тот же файл повторно
     };
     reader.readAsText(file);
 }
@@ -1627,6 +1751,10 @@ function saveNewSlot() {
     const title = document.getElementById('new-slot-title')?.value.trim() || 'Свободное окно';
     const energy = document.getElementById('new-slot-energy')?.value || 'medium';
 
+    if (timeToMinutes(end) <= timeToMinutes(start)) {
+        showToast('Конец слота должен быть позже начала', '⚠️');
+        return;
+    }
     state.isSynced = true;
     state.schedule.push({
         id: 'slot-' + Date.now(),
@@ -1645,9 +1773,25 @@ function saveNewSlot() {
 
 function copyShortcutUrl() {
     const box = document.getElementById('healthkit-shortcut-url');
-    if (box && navigator.clipboard) {
-        navigator.clipboard.writeText(box.textContent.trim());
-        showToast('Ссылка скопирована в буфер обмена!', '📋');
+    if (!box) return;
+    const text = box.textContent.trim();
+    const fallback = () => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;opacity:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (_) {}
+        ta.remove();
+        showToast(ok ? 'Ссылка скопирована!' : 'Не удалось скопировать — выделите ссылку вручную', ok ? '📋' : '⚠️');
+    };
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text)
+            .then(() => showToast('Ссылка скопирована в буфер обмена!', '📋'))
+            .catch(fallback);
+    } else {
+        fallback();
     }
 }
 
@@ -1682,6 +1826,7 @@ function startVoiceInput(inputId, btnId) {
     rec.onresult = (e) => {
         if (input) input.value = e.results[0][0].transcript;
     };
+    rec.onerror = () => showToast('Микрофон недоступен — введите текст вручную', '🎤');
     rec.onend = () => {
         if (btn) btn.style.borderColor = '';
     };
@@ -1692,7 +1837,165 @@ function escapeHtml(str) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/* =========================================================
+   7b. ОБЛАКО: GOOGLE APPS SCRIPT (общее хранилище для Safari и иконки на рабочем столе)
+   ========================================================= */
+const CLOUD_KEY = 'ritm_dnya_cloud_v1'; // url + токен хранятся отдельно и НЕ уходят в облако вместе с состоянием
+let cloudReady = false;
+let applyingRemote = false;
+let pushTimer = null;
+let cloudStatus = 'Облако не подключено';
+
+function getCloudCfg() {
+    try {
+        const c = JSON.parse(localStorage.getItem(CLOUD_KEY) || 'null');
+        return c && c.url && c.token ? c : null;
+    } catch (_) { return null; }
+}
+
+function setCloudStatus(text) {
+    cloudStatus = text;
+    const el = document.getElementById('cloud-status-text');
+    if (el) el.textContent = text;
+}
+
+const nowHM = () => new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+const localDateOf = (ts) => {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+async function cloudCall(cfg, action, body) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    try {
+        const res = body
+            // text/plain — «простой» запрос без preflight (Apps Script не отвечает на OPTIONS)
+            ? await fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, action, token: cfg.token }), signal: ctrl.signal })
+            : await fetch(`${cfg.url}?action=${action}&token=${encodeURIComponent(cfg.token)}`, { signal: ctrl.signal });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'server_error');
+        return data;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+function adoptRemoteState(remoteState, remoteUpdatedAt) {
+    applyingRemote = true;
+    state = normalizeState(remoteState);
+    state.updatedAt = remoteUpdatedAt;
+    lastSerialized = serializeForCompare(state);
+    applyingRemote = false;
+    rolloverIfNewDay();
+}
+
+async function cloudPull() {
+    const cfg = getCloudCfg();
+    if (!cfg) { cloudReady = true; return false; }
+    setCloudStatus('⏳ Облако: загрузка…');
+    try {
+        const data = await cloudCall(cfg, 'pull');
+        let changed = false;
+
+        if (data.state && (data.updatedAt || 0) > (state.updatedAt || 0)) {
+            adoptRemoteState(data.state, data.updatedAt);
+            changed = true;
+        }
+
+        // Новые данные от команды iPhone: применяем один раз и только если они сегодняшние
+        if (data.inbox && data.inbox.id && data.inbox.id !== state.lastInboxId) {
+            state.lastInboxId = data.inbox.id;
+            if (localDateOf(data.inbox.ts) === todayStr()) {
+                applyTelemetryParams(new URLSearchParams(data.inbox.qs), false);
+            }
+            changed = true;
+        }
+
+        cloudReady = true;
+        setCloudStatus(`☁ Облако подключено • ${nowHM()}`);
+        if (changed) renderAll();
+        if ((state.updatedAt || 0) > (data.updatedAt || 0)) scheduleCloudPush();
+        return changed;
+    } catch (e) {
+        cloudReady = true;
+        setCloudStatus('⚠ Облако недоступно — работаю локально');
+        return false;
+    }
+}
+
+function scheduleCloudPush() {
+    if (applyingRemote || !getCloudCfg()) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(cloudPush, 1500);
+}
+
+async function cloudPush() {
+    const cfg = getCloudCfg();
+    if (!cfg) return;
+    if (!cloudReady) { pushTimer = setTimeout(cloudPush, 1500); return; }
+    try {
+        const data = await cloudCall(cfg, 'push', { state, updatedAt: state.updatedAt || Date.now() });
+        if (data.conflict && data.state) {
+            adoptRemoteState(data.state, data.updatedAt);
+            renderAll();
+            setCloudStatus(`☁ Загружена более новая версия • ${nowHM()}`);
+        } else {
+            setCloudStatus(`☁ Сохранено в облако • ${nowHM()}`);
+        }
+    } catch (e) {
+        setCloudStatus('⚠ Не удалось сохранить в облако — повторю');
+        pushTimer = setTimeout(cloudPush, 15000);
+    }
+}
+
+async function saveCloudSettings() {
+    const url = (document.getElementById('cloud-url-input')?.value || '').trim();
+    const token = (document.getElementById('cloud-token-input')?.value || '').trim();
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/\s]+\/exec$/.test(url)) {
+        showToast('Нужна ссылка вида https://script.google.com/macros/s/…/exec', '⚠️');
+        return;
+    }
+    if (token.length < 12) {
+        showToast('Токен слишком короткий (нужно 12+ символов)', '⚠️');
+        return;
+    }
+    setCloudStatus('⏳ Проверяю подключение…');
+    try {
+        await cloudCall({ url, token }, 'ping');
+    } catch (e) {
+        const reason = e.message === 'auth' ? 'неверный токен'
+            : e.message === 'server_not_configured' ? 'в Code.gs не задан TOKEN'
+            : 'проверьте ссылку и доступ «Все»';
+        setCloudStatus(`⚠ Не подключено: ${reason}`);
+        showToast(`Не удалось подключиться: ${reason}`, '⚠️');
+        return;
+    }
+    localStorage.setItem(CLOUD_KEY, JSON.stringify({ url, token }));
+    cloudReady = false;
+    await cloudPull();
+    renderAll();
+    showToast('Облако подключено', '☁');
+}
+
+function disconnectCloud() {
+    localStorage.removeItem(CLOUD_KEY);
+    clearTimeout(pushTimer);
+    setCloudStatus('Облако не подключено');
+    renderAll();
+    showToast('Облако отключено (данные на устройстве сохранены)', '☁');
+}
+
+async function cloudSyncNow() {
+    if (!getCloudCfg()) { showToast('Сначала подключите облако ниже', '☁'); return; }
+    const changed = await cloudPull();
+    if (getCloudCfg()) await cloudPush();
+    closeAllModals();
+    showToast(changed ? `Данные из облака загружены. Заряд: ${getBatteryScore()}%` : 'Новых данных в облаке нет', changed ? '☁' : 'ℹ️');
 }
 
 /* =========================================================
@@ -1700,13 +2003,23 @@ function escapeHtml(str) {
    ========================================================= */
 document.addEventListener('DOMContentLoaded', () => {
     attachGlobalButtonRipple();
+    rolloverIfNewDay();
     parseUrlHealthTelemetry();
+    syncFilterChips();
     renderAll();
+    cloudPull(); // тянем данные из облака (в т.ч. то, что прислала команда iPhone)
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
+            rolloverIfNewDay(); // приложение могло проспать полночь в фоне
             parseUrlHealthTelemetry();
             renderAll();
+            cloudPull();
         }
     });
+
+    // Регистрация service worker (раньше sw.js лежал в репозитории, но нигде не подключался)
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW не зарегистрирован:', err));
+    }
 });

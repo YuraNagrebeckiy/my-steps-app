@@ -2,8 +2,8 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-[span_4](start_span)[span_4](end_span)[span_6](start_span)[span_6](end_span)[span_8](start_span)[span_8](end_span)fit=cover" />
-    <title>Ритм Дня v4.3 — Личный Ресурс • Юрий Нагребецкий</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Ритм Дня v4.5 — Личный Ресурс • Юрий Нагребецкий</title>
 
     <!-- Настройки PWA для iPhone 16 Pro Max (iOS 27.0.1) -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -14,6 +14,7 @@
 
     <link rel="manifest" href="manifest.json" />
     <link rel="apple-touch-icon" href="icon-192.png" />
+    <link rel="icon" type="image/png" href="icon-192.png" />
     <link rel="stylesheet" href="style.css" />
 </head>
 <body class="theme-uninitialized">
@@ -624,6 +625,23 @@
                 </div>
             </div>
 
+            <div class="perm-list" style="margin-top:8px;">
+                <div class="perm-item" style="flex-direction: column; align-items: stretch;">
+                    <div>
+                        <strong>☁ Облако (Google Apps Script)</strong>
+                        <p>Общее хранилище: данные из команды iPhone попадают сюда и подтягиваются в приложение — и в Safari, и с иконки на рабочем столе.</p>
+                        <p id="cloud-status-text" style="color:var(--aura-bright); font-weight:700;">Облако не подключено</p>
+                    </div>
+                    <input type="url" id="cloud-url-input" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-top:6px; padding:8px; border-radius:8px; background:#050912; color:#fff; border:1px solid rgba(255,255,255,0.2); font-size:0.74rem;" />
+                    <input type="password" id="cloud-token-input" placeholder="Токен (тот же, что в Code.gs)" autocomplete="off" style="margin-top:6px; padding:8px; border-radius:8px; background:#050912; color:#fff; border:1px solid rgba(255,255,255,0.2); font-size:0.8rem;" />
+                    <div style="display:flex; gap:6px; margin-top:6px;">
+                        <button class="perm-btn" style="flex:1;" onclick="saveCloudSettings()">🔌 Подключить</button>
+                        <button class="perm-btn" style="flex:1;" onclick="cloudSyncNow()">☁ Забрать сейчас</button>
+                        <button class="perm-btn" onclick="disconnectCloud()">✕</button>
+                    </div>
+                </div>
+            </div>
+
             <div style="display:flex; gap:8px; margin-top:6px;">
                 <button class="btn-secondary-neon" style="flex:1;" onclick="resetToEmptyTemplate(); closeAllModals();">🧹 Сбросить в пустой шаблон</button>
                 <button class="btn-secondary-neon" style="flex:1;" onclick="closeAllModals()">Закрыть</button>
@@ -673,6 +691,6 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="script.js" defer></script>
 </body>
 </html>
