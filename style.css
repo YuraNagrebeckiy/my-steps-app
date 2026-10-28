@@ -1747,7 +1747,14 @@ input[type="range"] {
 
 /* ==================== v4.4: доработки ==================== */
 .hold-point-item:focus-visible { outline: 2px solid var(--aura-bright); outline-offset: 2px; }
-.modal-content { max-height: calc(100dvh - 40px); overflow-y: auto; }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* v4.5: окно прокручивается целиком (.modal), элементы внутри не сжимаются; сетка не вылезает за край */
+.modal-content > * { flex-shrink: 0; min-width: 0; }
+.sync-inputs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sync-field input, .modal-content input[type="text"], .modal-content input[type="url"], .modal-content input[type="password"] {
+    width: 100%; min-width: 0; box-sizing: border-box;
+}
+.modal-content input[type="time"], .modal-content input[type="number"] { min-width: 0; max-width: 100%; box-sizing: border-box; }

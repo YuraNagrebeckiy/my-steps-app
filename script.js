@@ -1956,6 +1956,10 @@ async function cloudPush() {
 async function saveCloudSettings() {
     const url = (document.getElementById('cloud-url-input')?.value || '').trim();
     const token = (document.getElementById('cloud-token-input')?.value || '').trim();
+    if (/\/dev$/.test(url)) {
+        showToast('Это тестовая ссылка (/dev). Нужна ссылка развёртывания, заканчивается на /exec', '⚠️');
+        return;
+    }
     if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/\s]+\/exec$/.test(url)) {
         showToast('Нужна ссылка вида https://script.google.com/macros/s/…/exec', '⚠️');
         return;
@@ -1968,9 +1972,10 @@ async function saveCloudSettings() {
     try {
         await cloudCall({ url, token }, 'ping');
     } catch (e) {
-        const reason = e.message === 'auth' ? 'неверный токен'
-            : e.message === 'server_not_configured' ? 'в Code.gs не задан TOKEN'
-            : 'проверьте ссылку и доступ «Все»';
+        const reason = e.message === 'auth' ? 'токен не совпадает с серверным (запустите showToken() в скрипте и сверьте)'
+            : e.message === 'server_not_configured' ? 'на сервере нет токена: запустите setup() в скрипте и сделайте «Новую версию» развёртывания'
+            : e.name === 'AbortError' ? 'сервер не ответил за 15 с, попробуйте ещё раз'
+            : 'проверьте ссылку (/exec) и доступ «Все»';
         setCloudStatus(`⚠ Не подключено: ${reason}`);
         showToast(`Не удалось подключиться: ${reason}`, '⚠️');
         return;
