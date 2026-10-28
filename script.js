@@ -1,5 +1,5 @@
 /**
- * Ритм Дня v4.5 (облако) — Биометрическая система управления энергией, Календарём и Задачами
+ * Ритм Дня v4.6 (авто-данные «Здоровья») — Биометрическая система управления энергией, Календарём и Задачами
  * Оптимизировано для iPhone 16 Pro Max (iOS 27.0.1)
  * Ключевое отличие v4.3:
  *  - При первом запуске (и до синхронизации) приложение находится в состоянии ПУСТОГО ШАБЛОНА (isSynced: false):
@@ -364,9 +364,10 @@ function parseUrlHealthTelemetry() {
 }
 
 // Общий разбор параметров: приходят либо из адресной строки, либо из облачного «inbox» команды iPhone
-function applyTelemetryParams(params, fromUrl) {
+function applyTelemetryParams(params, fromUrl, quiet) {
     try {
         let updated = false;
+        const firstSyncToday = state.health.lastSyncDate !== todayStr();
 
         if (params.has('sleep')) {
             const val = parseFloat(String(params.get('sleep')).replace(',', '.'));
@@ -435,7 +436,8 @@ function applyTelemetryParams(params, fromUrl) {
             state.syncMeta.lastCalendarSync = `Подгружено из команды «Планировщик» (${timeStr})`;
             if (fromUrl) window.history.replaceState({}, document.title, window.location.pathname);
             saveState();
-            setTimeout(() => showToast(`Синхронизировано! Заряд: ${getBatteryScore()}%`, '📲'), 200);
+            // Фоновые обновления из облака (раз в час) — без всплывающих окон; первое за день — показываем
+            if (!quiet || firstSyncToday) setTimeout(() => showToast(`Синхронизировано! Заряд: ${getBatteryScore()}%`, '📲'), 200);
         }
         return updated;
     } catch (e) {
@@ -1294,9 +1296,18 @@ function renderHealthPageBreakdown() {
         const st = state.health.steps ?? 6400;
         const hr = state.health.restingHR ?? 55;
         const cfg = getCloudCfg();
-        urlBox.textContent = cfg
+        const maskTok = (u, t) => u.replace(encodeURIComponent(t), '••••••••');
+        const fullUrl = cfg
             ? `${cfg.url}?action=ingest&token=${encodeURIComponent(cfg.token)}&sleep=${sl}&deep=${dp}&bedtime=${bt}&calories=${cal}&steps=${st}&hr=${hr}`
             : `${base}?sleep=${sl}&deep=${dp}&bedtime=${bt}&calories=${cal}&steps=${st}&hr=${hr}&autoSync=1`;
+        urlBox.dataset.full = fullUrl;
+        urlBox.textContent = cfg ? maskTok(fullUrl, cfg.token) : fullUrl; // токен на экране скрыт (скриншоты безопасны)
+        const haeBox = document.getElementById('hae-url');
+        if (haeBox) {
+            const haeUrl = cfg ? `${cfg.url}?action=hae&token=${encodeURIComponent(cfg.token)}` : '';
+            haeBox.dataset.full = haeUrl;
+            haeBox.textContent = cfg ? maskTok(haeUrl, cfg.token) : 'Сначала подключите облако (Синхронизировать → ☁ Облако)';
+        }
     }
 }
 
@@ -1771,10 +1782,13 @@ function saveNewSlot() {
     showToast('Новый слот добавлен в план', '📅');
 }
 
-function copyShortcutUrl() {
-    const box = document.getElementById('healthkit-shortcut-url');
+function copyShortcutUrl() { copyElementText('healthkit-shortcut-url'); }
+
+function copyElementText(id) {
+    const box = document.getElementById(id);
     if (!box) return;
-    const text = box.textContent.trim();
+    const text = (box.dataset.full || box.textContent || '').trim();
+    if (!text || /^Сначала подключите/.test(text)) { showToast('Сначала подключите облако', '☁'); return; }
     const fallback = () => {
         const ta = document.createElement('textarea');
         ta.value = text;
@@ -1784,7 +1798,7 @@ function copyShortcutUrl() {
         let ok = false;
         try { ok = document.execCommand('copy'); } catch (_) {}
         ta.remove();
-        showToast(ok ? 'Ссылка скопирована!' : 'Не удалось скопировать — выделите ссылку вручную', ok ? '📋' : '⚠️');
+        showToast(ok ? 'Ссылка скопирована!' : 'Не удалось скопировать — повторите', ok ? '📋' : '⚠️');
     };
     if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(text)
@@ -1863,6 +1877,7 @@ function setCloudStatus(text) {
     if (el) el.textContent = text;
 }
 
+const localHM = (ts) => new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 const nowHM = () => new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 const localDateOf = (ts) => {
     const d = new Date(ts);
@@ -1911,7 +1926,11 @@ async function cloudPull() {
         if (data.inbox && data.inbox.id && data.inbox.id !== state.lastInboxId) {
             state.lastInboxId = data.inbox.id;
             if (localDateOf(data.inbox.ts) === todayStr()) {
-                applyTelemetryParams(new URLSearchParams(data.inbox.qs), false);
+                const applied = applyTelemetryParams(new URLSearchParams(data.inbox.qs), false, true);
+                if (applied) {
+                    const est = (state.estimatedFields || []).length;
+                    state.health.lastSync = `Из «Здоровья» (${data.inbox.src || 'облако'}) • данные от ${localHM(data.inbox.ts)}` + (est ? ` • оценочно: ${est} из 6` : '');
+                }
             }
             changed = true;
         }

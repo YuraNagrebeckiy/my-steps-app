@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Ритм Дня v4.5 — Личный Ресурс • Юрий Нагребецкий</title>
+    <title>Ритм Дня v4.6 — Личный Ресурс • Юрий Нагребецкий</title>
 
     <!-- Настройки PWA для iPhone 16 Pro Max (iOS 27.0.1) -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -465,7 +465,7 @@
 
                     <div class="health-control-row">
                         <div class="health-control-header">
-                            <span>🕘 Время отхода ко сну (до 23:30 = бонус +5%)</span>
+                            <span>🕘 Время отхода ко сну (до 23:00 = бонус +5%)</span>
                             <input type="time" id="input-bedtime" value="23:15" onchange="updateHealthMetric('bedtime', this.value)" class="time-input-neon" />
                         </div>
                     </div>
@@ -521,6 +521,16 @@
                 </p>
                 <div class="code-box" id="healthkit-shortcut-url" onclick="copyShortcutUrl()"></div>
                 <button class="btn-primary-neon" style="width:100%; margin-top: 8px;" onclick="copyShortcutUrl()">📋 Скопировать ссылку для команды «Планировщик»</button>
+            </section>
+
+            <!-- Автоматическая загрузка из Apple Здоровья (Health Auto Export) -->
+            <section class="glass-card">
+                <h2>🤖 Автозагрузка из «Здоровья» (без команд)</h2>
+                <p class="card-desc">
+                    Приложение <b>Health Auto Export</b> само читает Apple Здоровье (туда пишет Huawei Health) и раз в час отправляет сон по стадиям, шаги, ккал и пульс в ваше облако. Вставьте эту ссылку в его автоматизацию «REST API» (метод POST, формат JSON). Подробно — в файле SETUP_HEALTH.md.
+                </p>
+                <div class="code-box" id="hae-url" onclick="copyElementText('hae-url')"></div>
+                <button class="btn-primary-neon" style="width:100%; margin-top: 8px;" onclick="copyElementText('hae-url')">📋 Скопировать ссылку для Health Auto Export</button>
             </section>
         </main>
 

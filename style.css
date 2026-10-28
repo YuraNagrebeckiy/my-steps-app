@@ -1758,3 +1758,17 @@ input[type="range"] {
     width: 100%; min-width: 0; box-sizing: border-box;
 }
 .modal-content input[type="time"], .modal-content input[type="number"] { min-width: 0; max-width: 100%; box-sizing: border-box; }
+
+/* v4.6: iOS-поля времени не вылезают из ячейки, строка «Добавить задачу» не выходит за экран */
+input[type="time"], .time-input-neon {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
+    text-align: left; min-height: 42px;
+}
+input[type="time"]::-webkit-date-and-time-value { text-align: left; }
+.sync-field > * { min-width: 0; }
+.task-add-box, .task-add-bottom, .custom-slot-form { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.task-add-bottom { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.task-add-bottom .select-input { flex: 1 1 100%; min-width: 0; width: 100%; text-overflow: ellipsis; }
+.task-add-bottom .btn-primary-neon { flex: 1 1 100%; width: 100%; }
+.code-box { word-break: break-all; overflow-wrap: anywhere; }
