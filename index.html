@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Ритм Дня v4.6 — Личный Ресурс • Юрий Нагребецкий</title>
+    <title>Ритм Дня v5.0 — Личный Ресурс • Юрий Нагребецкий</title>
 
     <!-- Настройки PWA для iPhone 16 Pro Max (iOS 27.0.1) -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -13,7 +13,12 @@
     <meta name="theme-color" content="#070d14" id="meta-theme-color" />
 
     <link rel="manifest" href="manifest.json" />
-    <link rel="apple-touch-icon" href="icon-192.png" />
+    <link rel="apple-touch-icon" href="icon-180.png" />
+    <!-- Заставки запуска: iPhone 16 Pro Max (440×956), 16 Pro, 15/16 Plus, 15/16 -->
+    <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash-1320x2868.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash-1206x2622.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash-1290x2796.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash-1179x2556.png" />
     <link rel="icon" type="image/png" href="icon-192.png" />
     <link rel="stylesheet" href="style.css" />
 </head>
@@ -41,7 +46,7 @@
                     <span class="user-subtitle">ЮРИЙ НАГРЕБЕЦКИЙ • ЛИЧНЫЙ РЕСУРС</span>
                     <div class="title-row">
                         <h1 class="main-title">РИТМ ДНЯ</h1>
-                        <button class="sync-live-pill" id="force-sync-btn" onclick="openLiveSyncModal()" title="Синхронизировать данные с часов, Календаря и Задач">
+                        <button class="sync-live-pill" id="force-sync-btn" onclick="syncEverything(true)" title="Обновить всё: данные часов, Google Календарь и Google Задачи">
                             <span class="sync-dot" id="sync-dot-indicator"></span>
                             <span id="sync-pill-text">🔄 Синхронизировать</span>
                         </button>
@@ -62,6 +67,7 @@
 
         <!-- ==================== СТРАНИЦА 1: СВОДКА (ГЛАВНЫЙ ЭКРАН) ==================== -->
         <main id="page-home" class="page-section active">
+            <section class="glass-card hidden" id="setup-hint"></section>
 
             <!-- ЦЕНТРАЛЬНЫЙ 3D-ГОЛОГРАФИЧЕСКИЙ МОДУЛЬ БАТАРЕИ (HUD) -->
             <section class="battery-hud-showcase" id="battery-showcase">
@@ -351,7 +357,7 @@
             <section class="glass-card">
                 <div class="card-header-row">
                     <h2>📅 Календарь и Расписание дня</h2>
-                    <button class="btn-primary-neon" onclick="openLiveSyncModal()">🔄 Синхронизировать</button>
+                    <button class="btn-primary-neon" onclick="syncEverything(true)">🔄 Синхронизировать</button>
                 </div>
                 <p class="card-desc" id="calendar-sync-status-text">
                     При первом запуске расписание пустое. Нажмите «Синхронизировать», чтобы подгрузить слоты календаря и свободные окна.
@@ -380,7 +386,7 @@
                     <h2>📋 Банк задач (Выбор и Выполнение)</h2>
                     <div style="display:flex; gap:6px; align-items:center;">
                         <span class="energy-tag" id="tasks-count-badge">0 активных</span>
-                        <button class="hud-icon-btn" onclick="openLiveSyncModal()">🔄 Синхр.</button>
+                        <button class="hud-icon-btn" onclick="syncEverything(true)">🔄 Синхр.</button>
                     </div>
                 </div>
                 <p class="card-desc">
@@ -440,7 +446,8 @@
                 </p>
 
                 <div class="quick-chips" style="margin: 12px 0;">
-                    <button class="btn-primary-neon" onclick="openLiveSyncModal()">🔄 Синхронизировать и загрузить данные</button>
+                    <button class="btn-primary-neon" onclick="syncEverything(true)">🔄 Синхронизировать всё</button>
+                    <button class="hud-icon-btn" onclick="openLiveSyncModal()">✍ Ввести вручную / подключение</button>
                     <button class="chip" onclick="runPlannerShortcut()">⌚ Запустить команду «Планировщик»</button>
                     <button class="chip" onclick="resetToEmptyTemplate()">🧹 Сбросить в пустой шаблон</button>
                 </div>
@@ -515,10 +522,9 @@
 
             <!-- Ссылка для автоматизации «Планировщик» -->
             <section class="glass-card">
-                <h2>📲 Ссылка для твоей команды «Планировщик» на iPhone</h2>
+                <h2>📲 Адрес для команды «Планировщик»</h2>
                 <p class="card-desc">
-                    Когда команда «Планировщик» открывает эту ссылку, приложение автоматически заполняет пустой шаблон переданными показателями:
-                </p>
+                    Вставьте этот адрес в действие <b>«Получить содержимое URL»</b> (метод <b>POST</b>, тело JSON) в конце команды — токен и часовой пояс уже внутри. Пошаговая сборка команды — в SETUP_HEALTH.md:</p>
                 <div class="code-box" id="healthkit-shortcut-url" onclick="copyShortcutUrl()"></div>
                 <button class="btn-primary-neon" style="width:100%; margin-top: 8px;" onclick="copyShortcutUrl()">📋 Скопировать ссылку для команды «Планировщик»</button>
             </section>
@@ -641,12 +647,18 @@
                         <strong>☁ Облако (Google Apps Script)</strong>
                         <p>Общее хранилище: данные из команды iPhone попадают сюда и подтягиваются в приложение — и в Safari, и с иконки на рабочем столе.</p>
                         <p id="cloud-status-text" style="color:var(--aura-bright); font-weight:700;">Облако не подключено</p>
+                        <p id="agenda-status-text" style="font-size:0.8rem; opacity:0.85;">Календарь и Google Задачи: облако не подключено</p>
+                    </div>
+                    <div style="display:flex; gap:6px; margin-top:8px;">
+                        <input type="text" id="cloud-code-input" placeholder="Код подключения RD1… или ссылка + токен" autocapitalize="off" autocorrect="off" spellcheck="false" oninput="onConnectCodeInput(this)" style="flex:1; min-width:0; padding:8px; border-radius:8px; background:#050912; color:#fff; border:1px solid rgba(255,255,255,0.2);" />
+                        <button class="perm-btn" onclick="pasteConnectFromClipboard()">📋 Вставить</button>
                     </div>
                     <input type="url" id="cloud-url-input" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-top:6px; padding:8px; border-radius:8px; background:#050912; color:#fff; border:1px solid rgba(255,255,255,0.2); font-size:0.74rem;" />
                     <input type="password" id="cloud-token-input" placeholder="Токен (тот же, что в Code.gs)" autocomplete="off" style="margin-top:6px; padding:8px; border-radius:8px; background:#050912; color:#fff; border:1px solid rgba(255,255,255,0.2); font-size:0.8rem;" />
                     <div style="display:flex; gap:6px; margin-top:6px;">
                         <button class="perm-btn" style="flex:1;" onclick="saveCloudSettings()">🔌 Подключить</button>
                         <button class="perm-btn" style="flex:1;" onclick="cloudSyncNow()">☁ Забрать сейчас</button>
+                        <button class="perm-btn" onclick="copyConnectCode()" title="Скопировать код подключения для другого устройства">🔑</button>
                         <button class="perm-btn" onclick="disconnectCloud()">✕</button>
                     </div>
                 </div>

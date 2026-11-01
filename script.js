@@ -1,5 +1,5 @@
 /**
- * Ритм Дня v4.6 (авто-данные «Здоровья») — Биометрическая система управления энергией, Календарём и Задачами
+ * Ритм Дня v5.0 (Google Календарь + Задачи + одна кнопка) — Биометрическая система управления энергией, Календарём и Задачами
  * Оптимизировано для iPhone 16 Pro Max (iOS 27.0.1)
  * Ключевое отличие v4.3:
  *  - При первом запуске (и до синхронизации) приложение находится в состоянии ПУСТОГО ШАБЛОНА (isSynced: false):
@@ -84,6 +84,7 @@ const emptyInitialState = {
     lastActiveDate: null,
     updatedAt: 0,
     lastInboxId: null,
+    dismissedGoogle: [],
     estimatedFields: []
 };
 
@@ -196,13 +197,22 @@ function rolloverIfNewDay() {
     if (state.lastActiveDate) {
         state.schedule = state.schedule.filter(s => !s.source);
         state.schedule.forEach(s => { s.done = false; });
-        state.tasks = state.tasks.filter(t => !t.done);
+        state.tasks = state.tasks.filter(t => !t.done || (t.g && t.g.pendingDone !== undefined));
         state.holdPoints.forEach(h => { h.done = false; });
         state.manualOffset = 0;
         state.selectedTaskId = null;
     }
     state.lastActiveDate = today;
     return true;
+}
+
+// Расписание дня = ваша «рутина» (слоты без source) + внешние события (Google Календарь и др.).
+// Если рутины ещё нет — добавляем шаблон, не теряя события.
+function seedRoutineIfNeeded() {
+    if (state.schedule.some(s => !s.source)) return;
+    const ext = state.schedule.filter(s => s.source);
+    const base = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_SCHEDULE));
+    state.schedule = deduplicateScheduleArray(base.concat(ext)).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
 }
 
 function isHealthStale() {
@@ -278,6 +288,7 @@ function openLiveSyncModal() {
     if (urlIn && cfg) urlIn.value = cfg.url;
     if (tokIn && cfg) tokIn.value = cfg.token;
     setCloudStatus(cloudStatus);
+    setAgendaStatus(agendaStatusText());
 
     modal.classList.remove('hidden');
 }
@@ -338,9 +349,7 @@ function executeLiveTemplateSync() {
         rolloverIfNewDay();
 
         // Если шаблон расписания пуст — подгружаем расписание дня
-        if (!state.schedule || state.schedule.length === 0) {
-            state.schedule = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_SCHEDULE));
-        }
+        seedRoutineIfNeeded();
 
         // Если шаблон задач пуст — подгружаем Банк задач
         if (!state.tasks || state.tasks.length === 0) {
@@ -412,9 +421,7 @@ function applyTelemetryParams(params, fromUrl, quiet) {
             });
             state.estimatedFields = estimated;
 
-            if (!state.schedule || state.schedule.length === 0) {
-                state.schedule = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_SCHEDULE));
-            }
+            seedRoutineIfNeeded();
             if (!state.tasks || state.tasks.length === 0) {
                 state.tasks = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_TASKS));
             }
@@ -637,7 +644,7 @@ function applyTestBatteryLevel(targetScore) {
         state.isSynced = true;
         Object.assign(state.health, HEALTH_DEFAULTS);
         state.estimatedFields = Object.keys(HEALTH_DEFAULTS);
-        if (!state.schedule.length) state.schedule = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_SCHEDULE));
+        seedRoutineIfNeeded();
         if (!state.tasks.length) state.tasks = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_TASKS));
     }
     state.manualOffset = 0;
@@ -668,6 +675,7 @@ function toggleTaskCompleted(taskId, event) {
         matchingSlot.done = task.done;
     }
 
+    if (task.g) googleTaskSet(task, task.done);
     playTactileClick(task.done);
     renderAll();
     showToast(task.done ? `✓ Выполнено: ${task.title.slice(0, 32)}...` : 'Задача возвращена в активные', task.done ? '✅' : '↩️');
@@ -771,6 +779,7 @@ function renderAll() {
     renderTimeline();
     renderTasksAndHoldPoints();
     renderHealthPageBreakdown();
+    renderSetupHint();
     saveState();
 }
 
@@ -791,7 +800,8 @@ function renderHeaderDate() {
     const pillText = document.getElementById('sync-pill-text');
     if (pillText) {
         pillText.textContent = !state.isSynced ? '🔄 Синхронизировать'
-            : isHealthStale() ? '⚠ Данные за вчера — обновить' : '✓ Синхр. (Обновить)';
+            : isHealthStale() ? '⚠ Данные за вчера — обновить'
+            : (lastFullSync && getCloudCfg() ? `✓ Обновлено ${localHM(lastFullSync)}` : '✓ Синхр. (Обновить)');
     }
 }
 
@@ -1297,8 +1307,9 @@ function renderHealthPageBreakdown() {
         const hr = state.health.restingHR ?? 55;
         const cfg = getCloudCfg();
         const maskTok = (u, t) => u.replace(encodeURIComponent(t), '••••••••');
+        const tzName = encodeURIComponent((Intl.DateTimeFormat().resolvedOptions().timeZone) || '');
         const fullUrl = cfg
-            ? `${cfg.url}?action=ingest&token=${encodeURIComponent(cfg.token)}&sleep=${sl}&deep=${dp}&bedtime=${bt}&calories=${cal}&steps=${st}&hr=${hr}`
+            ? `${cfg.url}?action=raw&token=${encodeURIComponent(cfg.token)}&tz=${tzName}`   // готовый адрес для «Получить содержимое URL» (POST)
             : `${base}?sleep=${sl}&deep=${dp}&bedtime=${bt}&calories=${cal}&steps=${st}&hr=${hr}&autoSync=1`;
         urlBox.dataset.full = fullUrl;
         urlBox.textContent = cfg ? maskTok(fullUrl, cfg.token) : fullUrl; // токен на экране скрыт (скриншоты безопасны)
@@ -1454,13 +1465,15 @@ function addTomorrowTask() {
         complexity = cat === 'A' ? 'high' : cat === 'B' ? 'medium' : cat === 'REST' ? 'rest' : 'low';
     }
 
-    state.tasks.unshift({
+    const newTask = {
         id: 'task-' + Date.now(),
         title,
         category: cat,
         complexity,
         done: false
-    });
+    };
+    state.tasks.unshift(newTask);
+    googleTaskAdd(newTask); // если облако подключено — задача появится и в Google Задачах на телефоне
     input.value = '';
     renderAll();
     showToast(`Добавлена задача (Кат. ${cat})`, '📋');
@@ -1468,6 +1481,11 @@ function addTomorrowTask() {
 
 function removeTask(taskId, event) {
     if (event) event.stopPropagation();
+    const gone = state.tasks.find(t => t.id === taskId);
+    if (gone && gone.g) {
+        // убрана у нас, но остаётся в Google — запоминаем, чтобы синхронизация не вернула её обратно
+        state.dismissedGoogle = (state.dismissedGoogle || []).concat(gone.g.id).slice(-200);
+    }
     state.tasks = state.tasks.filter(t => t.id !== taskId);
     renderAll();
     showToast('Задача удалена', '🗑️');
@@ -1574,7 +1592,7 @@ function updateHealthMetric(key, val) {
     state.estimatedFields = (state.estimatedFields || []).filter(k => k !== key);
     state.health.lastSync = 'Откалибровано вручную • только что';
     state.health.lastSyncDate = todayStr();
-    if (!state.schedule.length) state.schedule = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_SCHEDULE));
+    seedRoutineIfNeeded();
     if (!state.tasks.length) state.tasks = JSON.parse(JSON.stringify(SYNCED_TEMPLATE_TASKS));
     renderAll();
 }
@@ -1789,21 +1807,23 @@ function copyElementText(id) {
     if (!box) return;
     const text = (box.dataset.full || box.textContent || '').trim();
     if (!text || /^Сначала подключите/.test(text)) { showToast('Сначала подключите облако', '☁'); return; }
+    copyText(text, 'Ссылка скопирована в буфер обмена!');
+}
+
+function copyText(text, okMessage) {
     const fallback = () => {
         const ta = document.createElement('textarea');
         ta.value = text;
-        ta.style.cssText = 'position:fixed;opacity:0;';
+        ta.style.cssText = 'position:fixed;opacity:0;font-size:16px;';
         document.body.appendChild(ta);
         ta.select();
         let ok = false;
         try { ok = document.execCommand('copy'); } catch (_) {}
         ta.remove();
-        showToast(ok ? 'Ссылка скопирована!' : 'Не удалось скопировать — повторите', ok ? '📋' : '⚠️');
+        showToast(ok ? okMessage : 'Не удалось скопировать — повторите', ok ? '📋' : '⚠️');
     };
     if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(text)
-            .then(() => showToast('Ссылка скопирована в буфер обмена!', '📋'))
-            .catch(fallback);
+        navigator.clipboard.writeText(text).then(() => showToast(okMessage, '📋')).catch(fallback);
     } else {
         fallback();
     }
@@ -1884,14 +1904,14 @@ const localDateOf = (ts) => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-async function cloudCall(cfg, action, body) {
+async function cloudCall(cfg, action, body, extra) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15000);
     try {
         const res = body
             // text/plain — «простой» запрос без preflight (Apps Script не отвечает на OPTIONS)
             ? await fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, action, token: cfg.token }), signal: ctrl.signal })
-            : await fetch(`${cfg.url}?action=${action}&token=${encodeURIComponent(cfg.token)}`, { signal: ctrl.signal });
+            : await fetch(`${cfg.url}?action=${action}&token=${encodeURIComponent(cfg.token)}${extra || ''}`, { signal: ctrl.signal });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'server_error');
         return data;
@@ -1972,38 +1992,97 @@ async function cloudPush() {
     }
 }
 
+function cloudErrorText(e) {
+    return e.message === 'auth' ? 'токен не совпадает с серверным (запустите showToken() в скрипте и сверьте)'
+        : e.message === 'server_not_configured' ? 'на сервере нет токена: запустите setup() в скрипте и сделайте «Новую версию» развёртывания'
+        : e.message === 'unknown_action' ? 'сервер устарел — вставьте новый Code.gs и сделайте «Новую версию» развёртывания'
+        : e.name === 'AbortError' ? 'сервер не ответил за 15 с, попробуйте ещё раз'
+        : 'проверьте ссылку (/exec) и доступ «Все»';
+}
+
+async function connectCloud(cfg) {
+    if (/\/dev$/.test(cfg.url)) { showToast('Это тестовая ссылка (/dev). Нужна ссылка развёртывания, заканчивается на /exec', '⚠️'); return false; }
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/\s]+\/exec$/.test(cfg.url)) { showToast('Нужна ссылка вида https://script.google.com/macros/s/…/exec', '⚠️'); return false; }
+    if ((cfg.token || '').length < 12) { showToast('Токен слишком короткий (нужно 12+ символов)', '⚠️'); return false; }
+    setCloudStatus('⏳ Проверяю подключение…');
+    try {
+        await cloudCall(cfg, 'ping');
+    } catch (e) {
+        const reason = cloudErrorText(e);
+        setCloudStatus(`⚠ Не подключено: ${reason}`);
+        showToast(`Не удалось подключиться: ${reason}`, '⚠️');
+        return false;
+    }
+    localStorage.setItem(CLOUD_KEY, JSON.stringify(cfg));
+    cloudReady = false;
+    await syncEverything(false, true);
+    showToast('Облако подключено. Календарь, задачи и данные загружены', '☁');
+    return true;
+}
+
 async function saveCloudSettings() {
     const url = (document.getElementById('cloud-url-input')?.value || '').trim();
     const token = (document.getElementById('cloud-token-input')?.value || '').trim();
-    if (/\/dev$/.test(url)) {
-        showToast('Это тестовая ссылка (/dev). Нужна ссылка развёртывания, заканчивается на /exec', '⚠️');
-        return;
+    return connectCloud({ url, token });
+}
+
+/* --- Код подключения: ВСЁ одной вставкой (ссылка + токен) --- */
+function encodeConnect(cfg) {
+    return 'RD1.' + btoa(JSON.stringify({ u: cfg.url, t: cfg.token })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function parseConnectInput(text) {
+    const str = String(text || '').trim();
+    if (!str) return null;
+    const m = str.match(/RD1\.([A-Za-z0-9_-]+)/);
+    if (m) {
+        try {
+            const j = JSON.parse(atob(m[1].replace(/-/g, '+').replace(/_/g, '/')));
+            if (j.u && j.t) return { url: j.u, token: j.t };
+        } catch (_) {}
     }
-    if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/\s]+\/exec$/.test(url)) {
-        showToast('Нужна ссылка вида https://script.google.com/macros/s/…/exec', '⚠️');
-        return;
-    }
-    if (token.length < 12) {
-        showToast('Токен слишком короткий (нужно 12+ символов)', '⚠️');
-        return;
-    }
-    setCloudStatus('⏳ Проверяю подключение…');
-    try {
-        await cloudCall({ url, token }, 'ping');
-    } catch (e) {
-        const reason = e.message === 'auth' ? 'токен не совпадает с серверным (запустите showToken() в скрипте и сверьте)'
-            : e.message === 'server_not_configured' ? 'на сервере нет токена: запустите setup() в скрипте и сделайте «Новую версию» развёртывания'
-            : e.name === 'AbortError' ? 'сервер не ответил за 15 с, попробуйте ещё раз'
-            : 'проверьте ссылку (/exec) и доступ «Все»';
-        setCloudStatus(`⚠ Не подключено: ${reason}`);
-        showToast(`Не удалось подключиться: ${reason}`, '⚠️');
-        return;
-    }
-    localStorage.setItem(CLOUD_KEY, JSON.stringify({ url, token }));
-    cloudReady = false;
-    await cloudPull();
-    renderAll();
-    showToast('Облако подключено', '☁');
+    // подойдёт и ссылка из Health Auto Export / команды: в ней уже есть адрес и токен
+    const u = str.match(/https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec/);
+    let t = str.match(/token=([A-Za-z0-9_-]{12,})/);
+    if (!t && u) t = str.replace(u[0], ' ').match(/(?:^|[^A-Za-z0-9_-])([A-Za-z0-9_-]{12,})(?![A-Za-z0-9_-])/); // отдельное слово-токен (ваш собственный тоже подойдёт)
+    return u && t ? { url: u[0], token: t[1] } : null;
+}
+
+async function applyConnectInput(text) {
+    const cfg = parseConnectInput(text);
+    if (!cfg) { showToast('Не нашёл ссылку и токен. Вставьте код подключения (RD1.…) или ссылку из Health Auto Export', '⚠️'); return false; }
+    const urlIn = document.getElementById('cloud-url-input'), tokIn = document.getElementById('cloud-token-input');
+    if (urlIn) urlIn.value = cfg.url;
+    if (tokIn) tokIn.value = cfg.token;
+    return connectCloud(cfg);
+}
+
+let connectingNow = false;
+function onConnectCodeInput(el) {
+    if (connectingNow || !parseConnectInput(el.value)) return;
+    connectingNow = true;
+    applyConnectInput(el.value).finally(() => { connectingNow = false; el.value = ''; });
+}
+
+function pasteConnectFromClipboard() {
+    if (!navigator.clipboard?.readText) { showToast('Вставьте код в поле ниже вручную', '📋'); return; }
+    navigator.clipboard.readText()
+        .then(txt => applyConnectInput(txt))
+        .catch(() => showToast('Нет доступа к буферу — вставьте код в поле ниже вручную', '📋'));
+}
+
+function copyConnectCode() {
+    const cfg = getCloudCfg();
+    if (!cfg) { showToast('Сначала подключите облако', '☁'); return; }
+    copyText(encodeConnect(cfg), 'Код подключения скопирован — вставьте его в приложении на рабочем столе');
+}
+
+async function handleConnectParam() {
+    const p = new URLSearchParams(window.location.search);
+    if (!p.has('connect')) return;
+    const raw = p.get('connect');
+    window.history.replaceState({}, document.title, window.location.pathname); // токен не остаётся в адресной строке/истории
+    await applyConnectInput(raw);
 }
 
 function disconnectCloud() {
@@ -2016,34 +2095,227 @@ function disconnectCloud() {
 
 async function cloudSyncNow() {
     if (!getCloudCfg()) { showToast('Сначала подключите облако ниже', '☁'); return; }
-    const changed = await cloudPull();
-    if (getCloudCfg()) await cloudPush();
     closeAllModals();
-    showToast(changed ? `Данные из облака загружены. Заряд: ${getBatteryScore()}%` : 'Новых данных в облаке нет', changed ? '☁' : 'ℹ️');
+    await syncEverything(true);
+}
+
+/* =========================================================
+   7c. GOOGLE КАЛЕНДАРЬ + GOOGLE ЗАДАЧИ + ЕДИНАЯ СИНХРОНИЗАЦИЯ
+   ========================================================= */
+const GCAL = 'Google Календарь';
+const GTASKS = 'Google Задачи';
+let agendaInfo = { ts: 0, events: 0, tasks: 0, warnings: [], error: null };
+let lastFullSync = 0;
+let syncBusy = false;
+
+function setAgendaStatus(text) {
+    const el = document.getElementById('agenda-status-text');
+    if (el) el.textContent = text;
+}
+
+function agendaStatusText() {
+    if (!getCloudCfg()) return 'Календарь и Google Задачи: облако не подключено';
+    if (agendaInfo.error) return `⚠ Календарь/Задачи: ${agendaInfo.error}`;
+    if (!agendaInfo.ts) return 'Календарь и Google Задачи: ещё не загружены';
+    return `📅 Календарь: ${agendaInfo.events} • ✅ Google Задачи: ${agendaInfo.tasks} • обновлено ${localHM(agendaInfo.ts)}`;
+}
+
+function applyAgenda(data) {
+    const result = { events: 0, tasks: 0 };
+
+    // ---- события календаря ----
+    if (data.today && data.today !== todayStr()) {
+        agendaInfo.warnings.push('Дата на сервере отличается от даты телефона — события пропущены');
+    } else {
+        const wasDone = {};
+        state.schedule.forEach(sl => { if (sl.source === GCAL) wasDone[sl.id] = sl.done; });
+        state.schedule = state.schedule.filter(sl => sl.source !== GCAL);
+        const evs = (data.events || []).filter(e => !e.allDay && e.start && e.end);
+        evs.forEach(ev => {
+            const cls = classifyEnergyByText(ev.title);
+            state.schedule.push({
+                id: `gcal-${ev.id}`, start: ev.start, end: ev.end, title: ev.title,
+                type: cls.energy === 'rest' ? 'break' : 'work', energy: cls.energy,
+                source: GCAL, done: !!wasDone[`gcal-${ev.id}`]
+            });
+        });
+        result.events = evs.length;
+        if (evs.length) seedRoutineIfNeeded();
+        state.schedule = deduplicateScheduleArray(state.schedule).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+    }
+
+    // ---- Google Задачи ----
+    if (Array.isArray(data.tasks)) {
+        const open = new Map(data.tasks.map(t => [t.id, t]));
+        const dismissed = new Set(state.dismissedGoogle || []);
+        // выполнены/удалены в Google → убираем у нас (кроме отправляемых прямо сейчас)
+        state.tasks = state.tasks.filter(t => !(t.g && !t.done && t.g.pendingDone === undefined && !open.has(t.g.id)));
+        data.tasks.forEach(gt => {
+            if (dismissed.has(gt.id)) return;
+            const mine = state.tasks.find(t => t.g && t.g.id === gt.id);
+            if (mine) { if (!mine.done) mine.title = gt.title; mine.due = gt.due; return; }
+            // задача с таким же названием уже была создана у нас — связываем, а не дублируем
+            const twin = state.tasks.find(t => !t.g && t.title.trim().toLowerCase() === gt.title.toLowerCase());
+            if (twin) { twin.g = { id: gt.id, list: gt.list }; twin.source = GTASKS; return; }
+            const cls = classifyEnergyByText(gt.title + ' ' + (gt.notes || ''));
+            state.tasks.unshift({
+                id: `g-${gt.id}`, title: gt.title, category: cls.category, complexity: cls.energy,
+                done: false, source: GTASKS, g: { id: gt.id, list: gt.list }, due: gt.due || ''
+            });
+        });
+        result.tasks = data.tasks.length;
+    }
+    return result;
+}
+
+async function cloudAgendaPull(force) {
+    const cfg = getCloudCfg();
+    if (!cfg) return null;
+    try {
+        await flushPendingGoogleTasks();
+        const tz = encodeURIComponent((Intl.DateTimeFormat().resolvedOptions().timeZone) || '');
+        const data = await cloudCall(cfg, 'agenda', null, `&tz=${tz}${force ? '&refresh=1' : ''}`);
+        agendaInfo = { ts: Date.now(), events: 0, tasks: 0, warnings: data.warnings || [], error: null };
+        const r = applyAgenda(data);
+        agendaInfo.events = r.events;
+        agendaInfo.tasks = r.tasks;
+        setAgendaStatus(agendaStatusText());
+        return r;
+    } catch (e) {
+        agendaInfo.error = e.message === 'unknown_action' || e.message === 'auth' || e.message === 'server_not_configured'
+            ? cloudErrorText(e) : (e.name === 'TypeError' ? 'нет сети' : cloudErrorText(e));
+        setAgendaStatus(agendaStatusText());
+        return null;
+    }
+}
+
+async function googleTaskSet(task, done) {
+    const cfg = getCloudCfg();
+    if (!cfg || !task.g) return;
+    task.g.pendingDone = !!done;   // пока не подтверждено сервером — храним намерение (работает и офлайн)
+    try {
+        await cloudCall(cfg, 'task_set', { list: task.g.list, id: task.g.id, done: !!done });
+        delete task.g.pendingDone;
+    } catch (_) { /* повторим при следующей синхронизации */ }
+    saveState();
+}
+
+async function flushPendingGoogleTasks() {
+    const pending = state.tasks.filter(t => t.g && t.g.pendingDone !== undefined);
+    for (const t of pending) await googleTaskSet(t, t.g.pendingDone);
+}
+
+async function googleTaskAdd(task) {
+    const cfg = getCloudCfg();
+    if (!cfg) return;
+    try {
+        const r = await cloudCall(cfg, 'task_add', { title: task.title });
+        if (r.task) {
+            task.g = { id: r.task.id, list: r.task.list };
+            task.source = GTASKS;
+            saveState();
+            renderAll();
+        }
+    } catch (_) { /* останется локальной задачей */ }
+}
+
+/** ОДНА кнопка: облако (Здоровье + состояние) → Google Календарь и Задачи → перерисовка. */
+async function syncEverything(manual, afterConnect) {
+    if (!getCloudCfg()) {
+        if (manual) { openLiveSyncModal(); showToast('Сначала подключите облако: вставьте код подключения', '☁'); }
+        return false;
+    }
+    if (syncBusy) return false;
+    syncBusy = true;
+    const pill = document.getElementById('sync-pill-text');
+    if (manual && pill) pill.textContent = '⏳ Синхронизация…';
+    try {
+        await cloudPull();
+        const ag = await cloudAgendaPull(!!manual);
+        lastFullSync = Date.now();
+        renderAll();
+        if (manual) {
+            const bits = [];
+            if (ag) bits.push(`календарь ${ag.events}`, `задачи ${ag.tasks}`); else bits.push('календарь/задачи — ошибка');
+            bits.push(isHealthStale() || !state.isSynced ? 'Здоровье: нет свежих данных' : `заряд ${getBatteryScore()}%`);
+            showToast(`Готово: ${bits.join(' • ')}`, ag ? '✅' : '⚠️');
+        }
+    } finally {
+        syncBusy = false;
+        renderAll();
+    }
+    return true;
+}
+
+/* --- Подсказки на главном экране: установка, подключение, свежесть данных --- */
+const HINT_KEY = 'ritm_install_hint_dismissed';
+function dismissInstallHint() {
+    try { localStorage.setItem(HINT_KEY, '1'); } catch (_) {}
+    renderSetupHint();
+}
+
+function renderSetupHint() {
+    const el = document.getElementById('setup-hint');
+    if (!el) return;
+    const items = [];
+    const cfg = getCloudCfg();
+    const ios = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent || '');
+    const standalone = (typeof navigator !== 'undefined' && navigator.standalone === true) || (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches);
+    let dismissed = false;
+    try { dismissed = !!localStorage.getItem(HINT_KEY); } catch (_) {}
+
+    if (ios && !standalone && !dismissed) {
+        items.push(`<div class="hint-row"><span>📲 <b>Установите как приложение:</b> Safari → «Поделиться» → «На экран “Домой”». Откроется на весь экран и будет работать офлайн.</span><button class="chip" onclick="dismissInstallHint()">Скрыть</button></div>`);
+    }
+    if (!cfg) {
+        items.push(`<div class="hint-row"><span>☁ <b>Подключите Google (1 минута):</b> вставьте код подключения — и календарь, задачи и данные часов начнут подтягиваться сами.</span><button class="chip" onclick="openLiveSyncModal()">Подключить</button></div>`);
+    } else {
+        if (agendaInfo.error) {
+            items.push(`<div class="hint-row"><span>⚠ <b>Google Календарь/Задачи:</b> ${escapeHtml(agendaInfo.error)}</span><button class="chip" onclick="syncEverything(true)">Повторить</button></div>`);
+        } else if (agendaInfo.warnings.length) {
+            items.push(`<div class="hint-row"><span>⚠ ${escapeHtml(agendaInfo.warnings.join('; ').slice(0, 220))} — запустите setup() в скрипте и сделайте новую версию развёртывания.</span></div>`);
+        }
+        if (!state.isSynced || isHealthStale()) {
+            items.push(`<div class="hint-row"><span>❤️ <b>Данные «Здоровья» за сегодня ещё не пришли.</b> Они загружаются командой «Планировщик» или Health Auto Export.</span><button class="chip" onclick="runPlannerShortcut()">Запустить команду</button></div>`);
+        }
+    }
+    el.innerHTML = items.join('');
+    el.classList.toggle('hidden', items.length === 0);
 }
 
 /* =========================================================
    8. ИНИЦИАЛИЗАЦИЯ ПРИ ОТКРЫТИИ ПРИЛОЖЕНИЯ
    ========================================================= */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     attachGlobalButtonRipple();
     rolloverIfNewDay();
     parseUrlHealthTelemetry();
     syncFilterChips();
     renderAll();
-    cloudPull(); // тянем данные из облака (в т.ч. то, что прислала команда iPhone)
+    await handleConnectParam();     // ?connect=RD1… — подключение одной ссылкой
+    syncEverything(false);          // облако + Google Календарь + Google Задачи при каждом запуске
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             rolloverIfNewDay(); // приложение могло проспать полночь в фоне
             parseUrlHealthTelemetry();
             renderAll();
-            cloudPull();
+            if (Date.now() - lastFullSync > 45000) syncEverything(false);
         }
     });
 
-    // Регистрация service worker (раньше sw.js лежал в репозитории, но нигде не подключался)
+    // Пока приложение открыто — обновляем данные раз в 10 минут
+    setInterval(() => {
+        if (document.visibilityState === 'visible' && Date.now() - lastFullSync > 10 * 60 * 1000) syncEverything(false);
+    }, 60000);
+
+    // Service worker: офлайн-режим и автоматическое обновление при выходе новой версии
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+        const hadController = !!navigator.serviceWorker.controller;
+        let reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (hadController && !reloaded) { reloaded = true; location.reload(); }
+        });
         navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW не зарегистрирован:', err));
     }
 });
